@@ -191,6 +191,10 @@ const MAX_LOG_LINES = 1000;
 
 let _dialogResolve = null;
 let _dialogTrigger = null;
+/**
+ * Low-level dialog primitive. `html` MUST be pre-sanitised (all dynamic
+ * values through esc()). Prefer showConfirm / showDangerConfirm / showAlert.
+ */
 function showDialog(html) {
   return new Promise(resolve => {
     _dialogResolve = resolve;
@@ -294,7 +298,10 @@ async function deleteUps(name) {
   await api('/ups/' + encodeURIComponent(name), {method:'DELETE'});
   try {
     await api('/service/restart-all', {method:'POST'});
-  } catch(e) { console.error('restart-all failed:', e); }
+  } catch(e) {
+    console.error('restart-all failed:', e);
+    showAlert('Restart failed — changes may not be fully applied:\n' + e.message, 'Restart Error');
+  }
   loadUps();
 }
 
@@ -336,7 +343,10 @@ async function saveUps(edit) {
     $('modal').innerHTML = '<h3>UPS Added</h3><p>Restarting NUT services...</p>';
     try {
       await api('/service/restart-all', {method:'POST'});
-    } catch(e) { console.error('restart-all failed:', e); }
+    } catch(e) {
+      console.error('restart-all failed:', e);
+      showAlert('Restart failed — changes may not be fully applied:\n' + e.message, 'Restart Error');
+    }
   }
   closeModal(); loadUps();
 }
