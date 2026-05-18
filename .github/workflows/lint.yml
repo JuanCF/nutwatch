@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  lint:
+  lint-shell:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,3 +18,22 @@ jobs:
 
       - name: shfmt
         run: find vm/ -name "*.sh" -print0 | xargs -0 shfmt -d -i 2
+
+  lint-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install flask pytest
+
+      - name: Syntax check
+        run: find src/nut-admin -name '*.py' -print0 | xargs -0 python3 -m py_compile
+
+      - name: Tests
+        run: cd src/nut-admin && python3 -m pytest tests/ -v
