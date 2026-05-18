@@ -107,6 +107,7 @@
   }
   .config-buttons { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
   .empty { color: var(--muted); font-size: 0.9rem; }
+  .confirm-modal p { margin: 0 0 1rem; line-height: 1.5; white-space: pre-wrap; font-family: var(--mono); font-size: 0.85rem; }
 </style>
 </head>
 <body>
@@ -177,12 +178,69 @@
   <div class="modal" id="modal"></div>
 </div>
 
+<div id="confirm-overlay" class="modal-overlay" onclick="if(event.target===this)dismissDialog(false)">
+  <div class="modal confirm-modal" id="confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm action" tabindex="-1"></div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 let currentConfigFile = '';
 let logPaused = false;
 let es = null;
 const MAX_LOG_LINES = 1000;
+
+let _dialogResolve = null;
+let _dialogTrigger = null;
+/**
+ * Low-level dialog primitive. `html` MUST be pre-sanitised (all dynamic
+ * values through esc()). Prefer showConfirm / showDangerConfirm / showAlert.
+ */
+function showDialog(html) {
+  return new Promise(resolve => {
+    _dialogResolve = resolve;
+    _dialogTrigger = document.activeElement;
+    $('confirm-modal').innerHTML = html;
+    $('confirm-overlay').classList.add('open');
+    $('confirm-modal').focus();
+  });
+}
+function dismissDialog(val) {
+  $('confirm-overlay').classList.remove('open');
+  if (_dialogResolve) { _dialogResolve(val); _dialogResolve = null; }
+  if (_dialogTrigger) { _dialogTrigger.focus(); _dialogTrigger = null; }
+}
+function showConfirm(msg) {
+  return showDialog(
+    '<p>' + esc(msg) + '</p>' +
+    '<div class="modal-actions">' +
+      '<button class="secondary" onclick="dismissDialog(false)">Cancel</button>' +
+      '<button class="primary" onclick="dismissDialog(true)">Confirm</button>' +
+    '</div>'
+  );
+}
+function showDangerConfirm(msg) {
+  return showDialog(
+    '<p>' + esc(msg) + '</p>' +
+    '<div class="modal-actions">' +
+      '<button class="secondary" onclick="dismissDialog(false)">Cancel</button>' +
+      '<button class="primary danger" onclick="dismissDialog(true)">Delete</button>' +
+    '</div>'
+  );
+}
+function showAlert(msg, title) {
+  return showDialog(
+    (title ? '<h3>' + esc(title) + '</h3>' : '') +
+    '<p>' + esc(msg) + '</p>' +
+    '<div class="modal-actions">' +
+      '<button class="primary" onclick="dismissDialog()">OK</button>' +
+    '</div>'
+  );
+}
+
+document.addEventListener('keydown', function(e) {
+  if (!$('confirm-overlay').classList.contains('open')) return;
+  if (e.key === 'Escape') { dismissDialog(false); e.preventDefault(); }
+});
 
 function showSection(id, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -229,15 +287,21 @@ async function loadUps() {
 }
 
 async function driverAction(name, action) {
-  if (!confirm(action + ' driver for ' + name + '?')) return;
+  if (!await showConfirm(action + ' driver for ' + name + '?')) return;
   const r = await api('/driver/' + encodeURIComponent(name) + '/' + action, {method:'POST'});
-  alert('Driver ' + action + ': rc=' + r.returncode + '\n' + r.stdout + '\n' + r.stderr);
+  await showAlert('Driver ' + action + ': rc=' + r.returncode + '\n' + r.stdout + '\n' + r.stderr, 'Driver Result');
   loadUps();
 }
 
 async function deleteUps(name) {
-  if (!confirm('Delete UPS "' + name + '"?')) return;
+  if (!await showDangerConfirm('Delete UPS "' + name + '"?')) return;
   await api('/ups/' + encodeURIComponent(name), {method:'DELETE'});
+  try {
+    await api('/service/restart-all', {method:'POST'});
+  } catch(e) {
+    console.error('restart-all failed:', e);
+    showAlert('Restart failed — changes may not be fully applied:\n' + e.message, 'Restart Error');
+  }
   loadUps();
 }
 
@@ -276,6 +340,13 @@ async function saveUps(edit) {
   } else {
     body.name = name;
     await api('/ups', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    $('modal').innerHTML = '<h3>UPS Added</h3><p>Restarting NUT services...</p>';
+    try {
+      await api('/service/restart-all', {method:'POST'});
+    } catch(e) {
+      console.error('restart-all failed:', e);
+      showAlert('Restart failed — changes may not be fully applied:\n' + e.message, 'Restart Error');
+    }
   }
   closeModal(); loadUps();
 }
@@ -285,13 +356,68 @@ async function scanUps() {
   $('modal-overlay').classList.add('open');
   try {
     const r = await api('/ups/scan', {method:'POST'});
-    $('modal').innerHTML =
-      '<h3>USB Scan Result</h3>' +
-      '<div class="scan-output">' + esc(r.stdout || '(no stdout)') + '\n' + esc(r.stderr || '') + '</div>' +
+    const devices = r.devices || [];
+    if (r.returncode !== 0 && !devices.length) {
+      $('modal').innerHTML =
+        '<h3>USB Scan Failed</h3>' +
+        '<div class="scan-output">' + esc(r.stderr || 'Unknown error') + '</div>' +
+        '<div class="modal-actions"><button class="secondary" onclick="closeModal()">Close</button></div>';
+      return;
+    }
+    if (!devices.length) {
+      $('modal').innerHTML =
+        '<h3>USB Scan Result</h3>' +
+        '<p class="empty">No USB UPS devices detected.</p>' +
+        (r.stderr ? '<div class="scan-output">' + esc(r.stderr) + '</div>' : '') +
+        '<div class="modal-actions"><button class="secondary" onclick="closeModal()">Close</button></div>';
+      return;
+    }
+    let html = '<h3>Detected UPS Devices</h3>';
+    devices.forEach((d, i) => {
+      const extras = Object.entries(d.extra || {});
+      html += '<div class="card" style="margin-bottom:0.75rem">' +
+        '<h3>' + esc(d.scanner_name) + '</h3>' +
+        (d.desc ? '<div class="meta">desc: ' + esc(d.desc) + '</div>' : '') +
+        '<div class="meta">driver: ' + esc(d.driver || '-') + '</div>' +
+        '<div class="meta">port: ' + esc(d.port || '-') + '</div>' +
+        (d.vendorid ? '<div class="meta">vendorid: ' + esc(d.vendorid) + '</div>' : '') +
+        (d.productid ? '<div class="meta">productid: ' + esc(d.productid) + '</div>' : '') +
+        extras.map(e => '<div class="meta">' + esc(e[0]) + ': ' + esc(e[1]) + '</div>').join('') +
+        '<div class="actions"><button class="primary" onclick="addScannedUps(' + i + ')">Add to NUT</button></div>' +
+      '</div>';
+    });
+    html += '<details style="margin-top:0.75rem"><summary style="cursor:pointer;color:var(--muted);font-size:0.85rem">Raw output</summary>' +
+      '<div class="scan-output">' + esc(r.stdout || '(no stdout)') + '\n' + esc(r.stderr || '') + '</div></details>' +
       '<div class="modal-actions"><button class="secondary" onclick="closeModal()">Close</button></div>';
+    window._scanDevices = devices;
+    $('modal').innerHTML = html;
   } catch (e) {
     $('modal').innerHTML = '<h3>Error</h3><div class="scan-output">' + esc(e.message) + '</div><div class="modal-actions"><button class="secondary" onclick="closeModal()">Close</button></div>';
   }
+}
+
+function addScannedUps(index) {
+  const d = window._scanDevices[index];
+  if (!d) return;
+  const directives = Object.entries(d.extra || {}).map(e => e[0] + '=' + e[1]).join('\n');
+  $('modal').innerHTML =
+    '<h3>Add Scanned UPS</h3>' +
+    '<div class="field"><label>Name</label><input id="u-name" value="' + esc(d.scanner_name) + '"></div>' +
+    '<div class="field"><label>Driver</label><input id="u-driver" value="' + esc(d.driver || 'usbhid-ups') + '"></div>' +
+    '<div class="field"><label>Port</label><input id="u-port" value="' + esc(d.port || 'auto') + '"></div>' +
+    '<div class="field"><label>Description</label><input id="u-desc" value="' + esc(d.desc || '') + '"></div>' +
+    '<div class="field"><label>Extra directives (key=value per line)</label>' +
+      '<textarea id="u-directives" style="height:80px;font-family:var(--mono);background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;resize:vertical;">' +
+      esc(directives) + (d.vendorid ? '\nvendorid=' + esc(d.vendorid) : '') + (d.productid ? '\nproductid=' + esc(d.productid) : '') +
+      '</textarea></div>' +
+    '<div class="modal-actions">' +
+      '<button class="secondary" onclick="closeModal()">Cancel</button>' +
+      '<button class="primary" onclick="saveUpsScanned()">Add UPS</button>' +
+    '</div>';
+}
+
+async function saveUpsScanned() {
+  await saveUps(false);
 }
 
 async function loadUsers() {
@@ -314,7 +440,7 @@ async function loadUsers() {
 }
 
 async function deleteUser(name) {
-  if (!confirm('Delete user "' + name + '"?')) return;
+  if (!await showDangerConfirm('Delete user "' + name + '"?')) return;
   await api('/users/' + encodeURIComponent(name), {method:'DELETE'});
   loadUsers();
 }
@@ -347,7 +473,7 @@ async function saveUser(edit) {
   if (edit) {
     await api('/users/' + encodeURIComponent(name), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   } else {
-    if (!pass) { alert('Password is required for new users'); return; }
+    if (!pass) { await showAlert('Password is required for new users', 'Validation Error'); return; }
     body.name = name;
     body.password = pass;
     await api('/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
@@ -413,11 +539,11 @@ async function loadConfig(filename) {
 }
 
 async function saveConfig() {
-  if (!currentConfigFile) { alert('No config loaded'); return; }
-  if (currentConfigFile === 'upsd.users') { alert('upsd.users is read-only'); return; }
+  if (!currentConfigFile) { await showAlert('No config loaded', 'Error'); return; }
+  if (currentConfigFile === 'upsd.users') { await showAlert('upsd.users is read-only', 'Error'); return; }
   const body = $('config-editor').value;
   await api('/config/' + encodeURIComponent(currentConfigFile), {method:'PUT', body});
-  alert('Saved ' + currentConfigFile);
+  await showAlert('Saved ' + currentConfigFile, 'Config Saved');
 }
 
 function closeModal() {

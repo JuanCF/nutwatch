@@ -171,6 +171,95 @@ def serialize_upsd_users(entries: list) -> str:
     return "\n".join(lines)
 
 
+# --- Nut-scanner Parser ---
+
+def parse_nut_scanner_output(stdout: str) -> list:
+    devices = []
+    current = None
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            if current:
+                devices.append(current)
+                current = None
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if current:
+                devices.append(current)
+            section_name = stripped[1:-1].strip()
+            current = {"scanner_name": section_name, "directives": {}}
+            continue
+        if current is None:
+            continue
+        if "=" in stripped:
+            key, val = stripped.split("=", 1)
+            key = key.strip()
+            val = val.strip().strip('"')
+            current["directives"][key] = val
+    if current:
+        devices.append(current)
+    for d in devices:
+        directives = d.pop("directives")
+        d["driver"] = directives.pop("driver", "")
+        d["port"] = directives.pop("port", "")
+        d["desc"] = directives.pop("desc", "")
+        d["vendorid"] = directives.pop("vendorid", "")
+        d["productid"] = directives.pop("productid", "")
+        d["extra"] = directives
+    return devices
+
+
+MONITOR_RE = re.compile(
+    r"^\s*MONITOR\s+(\S+?)(@\S+)?\s+(\d+)\s+(\S+)\s+(\S+)\s+(master|slave)\s*$",
+    re.IGNORECASE,
+)
+
+
+def parse_monitor_lines(content: str) -> list:
+    monitors = []
+    for line in content.splitlines():
+        m = MONITOR_RE.match(line)
+        if m:
+            monitors.append({
+                "upsname": m.group(1),
+                "hostspec": m.group(2) or "@localhost",
+                "power": int(m.group(3)),
+                "username": m.group(4),
+                "password": m.group(5),
+                "role": m.group(6),
+                "raw": line,
+            })
+    return monitors
+
+
+def remove_monitor_line(content: str, upsname: str) -> str:
+    lines = []
+    for line in content.splitlines():
+        m = MONITOR_RE.match(line)
+        if m and m.group(1) == upsname:
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def add_monitor_line(
+    content: str, upsname: str, power: int, username: str, password: str, role: str
+) -> str:
+    hostspec = "@localhost"
+    line = f"MONITOR {upsname}{hostspec} {power} {username} {password} {role}"
+    if content and not content.endswith("\n"):
+        content += "\n"
+    return content + line + "\n"
+
+
+def find_monitor_user(content: str) -> tuple:
+    entries = parse_upsd_users(content)
+    for e in entries:
+        if e.get("upsmon") in ("master", "slave"):
+            return e["name"], e.get("password", ""), e["upsmon"]
+    return None, None, None
+
+
 # --- Helpers ---
 
 def read_file(path: str) -> str:
@@ -186,6 +275,12 @@ def write_file(path: str, content: str) -> None:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
+        try:
+            st = os.stat(path)
+            os.chmod(tmp_path, st.st_mode)
+            os.chown(tmp_path, st.st_uid, st.st_gid)
+        except (FileNotFoundError, PermissionError):
+            os.chmod(tmp_path, 0o640)
         os.replace(tmp_path, path)
         tmp_path = None
     finally:
@@ -267,6 +362,30 @@ def add_ups():
         new_entry["directives"].append([key, val])
     entries.append(new_entry)
     write_file(path, serialize_ups_conf(entries))
+    upsmon_path = os.path.join(NUT_DIR, "upsmon.conf")
+    try:
+        upsmon_content = read_file(upsmon_path)
+        monitors = parse_monitor_lines(upsmon_content)
+        if not any(m["upsname"] == name for m in monitors):
+            mon_user, mon_pass, mon_role = None, None, None
+            if monitors:
+                mon_user = monitors[0]["username"]
+                mon_pass = monitors[0]["password"]
+                mon_role = monitors[0]["role"]
+            else:
+                users_path = os.path.join(NUT_DIR, "upsd.users")
+                try:
+                    users_content = read_file(users_path)
+                    mon_user, mon_pass, mon_role = find_monitor_user(users_content)
+                except FileNotFoundError:
+                    pass
+            if mon_user:
+                upsmon_content = add_monitor_line(
+                    upsmon_content, name, 1, mon_user, mon_pass, mon_role
+                )
+                write_file(upsmon_path, upsmon_content)
+    except FileNotFoundError:
+        pass
     return jsonify(new_entry), 201
 
 
@@ -335,6 +454,14 @@ def delete_ups(name):
     if len(new_entries) == len(entries):
         return jsonify({"error": "not found"}), 404
     write_file(path, serialize_ups_conf(new_entries))
+    upsmon_path = os.path.join(NUT_DIR, "upsmon.conf")
+    try:
+        upsmon_content = read_file(upsmon_path)
+        upsmon_new = remove_monitor_line(upsmon_content, name)
+        if upsmon_new != upsmon_content:
+            write_file(upsmon_path, upsmon_new)
+    except FileNotFoundError:
+        pass
     return jsonify({"ok": True})
 
 
@@ -342,7 +469,8 @@ def delete_ups(name):
 @require_admin
 def scan_ups():
     rc, out, err = run_cmd(["nut-scanner", "-U"], timeout=30)
-    return jsonify({"returncode": rc, "stdout": out, "stderr": err})
+    devices = parse_nut_scanner_output(out) if rc == 0 else []
+    return jsonify({"returncode": rc, "stdout": out, "stderr": err, "devices": devices})
 
 
 @app.route("/api/users", methods=["GET"])
