@@ -179,7 +179,7 @@
 </div>
 
 <div id="confirm-overlay" class="modal-overlay" onclick="if(event.target===this)dismissDialog(false)">
-  <div class="modal confirm-modal" id="confirm-modal"></div>
+  <div class="modal confirm-modal" id="confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm action" tabindex="-1"></div>
 </div>
 
 <script>
@@ -190,16 +190,20 @@ let es = null;
 const MAX_LOG_LINES = 1000;
 
 let _dialogResolve = null;
+let _dialogTrigger = null;
 function showDialog(html) {
   return new Promise(resolve => {
     _dialogResolve = resolve;
+    _dialogTrigger = document.activeElement;
     $('confirm-modal').innerHTML = html;
     $('confirm-overlay').classList.add('open');
+    $('confirm-modal').focus();
   });
 }
 function dismissDialog(val) {
   $('confirm-overlay').classList.remove('open');
   if (_dialogResolve) { _dialogResolve(val); _dialogResolve = null; }
+  if (_dialogTrigger) { _dialogTrigger.focus(); _dialogTrigger = null; }
 }
 function showConfirm(msg) {
   return showDialog(
@@ -228,6 +232,11 @@ function showAlert(msg, title) {
     '</div>'
   );
 }
+
+document.addEventListener('keydown', function(e) {
+  if (!$('confirm-overlay').classList.contains('open')) return;
+  if (e.key === 'Escape') { dismissDialog(false); e.preventDefault(); }
+});
 
 function showSection(id, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -285,7 +294,7 @@ async function deleteUps(name) {
   await api('/ups/' + encodeURIComponent(name), {method:'DELETE'});
   try {
     await api('/service/restart-all', {method:'POST'});
-  } catch(e) {}
+  } catch(e) { console.error('restart-all failed:', e); }
   loadUps();
 }
 
@@ -327,7 +336,7 @@ async function saveUps(edit) {
     $('modal').innerHTML = '<h3>UPS Added</h3><p>Restarting NUT services...</p>';
     try {
       await api('/service/restart-all', {method:'POST'});
-    } catch(e) {}
+    } catch(e) { console.error('restart-all failed:', e); }
   }
   closeModal(); loadUps();
 }

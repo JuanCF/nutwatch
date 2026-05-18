@@ -145,7 +145,7 @@ def test_add_monitor_line_no_duplicate_newline():
     content = "MINSUPPLIES 1\n"
     result = add_monitor_line(content, "myups", 1, "monuser", "secret", "master")
     lines = result.split("\n")
-    monitor_lines = [l for l in lines if l.startswith("MONITOR")]
+    monitor_lines = [line for line in lines if line.startswith("MONITOR")]
     assert len(monitor_lines) == 1
 
 
@@ -159,7 +159,7 @@ def test_find_monitor_user_with_master():
 
 def test_find_monitor_user_picks_first():
     content = "[admin]\n  password = adminpass\n  upsmon = master\n\n[slave]\n  password = slavepass\n  upsmon = slave\n"
-    name, pwd, role = find_monitor_user(content)
+    name, _pwd, role = find_monitor_user(content)
     assert name == "admin"
     assert role == "master"
 

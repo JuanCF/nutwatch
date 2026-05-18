@@ -279,7 +279,7 @@ def write_file(path: str, content: str) -> None:
             st = os.stat(path)
             os.chmod(tmp_path, st.st_mode)
             os.chown(tmp_path, st.st_uid, st.st_gid)
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             os.chmod(tmp_path, 0o640)
         os.replace(tmp_path, path)
         tmp_path = None

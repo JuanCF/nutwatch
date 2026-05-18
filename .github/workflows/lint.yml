@@ -27,13 +27,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install flask pytest
+        run: pip install -r src/nut-admin/requirements.txt
 
       - name: Syntax check
         run: find src/nut-admin -name '*.py' -print0 | xargs -0 python3 -m py_compile
 
       - name: Tests
-        run: cd src/nut-admin && python3 -m pytest tests/ -v
+        working-directory: src/nut-admin
+        run: python3 -m pytest tests/ -v
