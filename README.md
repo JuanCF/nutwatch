@@ -16,6 +16,7 @@ A bash script to automatically create an Ubuntu 24.04 VM on Proxmox VE, configur
 - 📊 **Status Summary** - Provides test commands and client configuration snippets
 - 🛡️ **Error Handling** - Validates inputs, handles edge cases (duplicate UPS models, slow DHCP, etc.)
 - 🔑 **Auto-Generated Passwords** - Optionally generate secure passwords automatically
+- 🌐 **Web Admin UI** - Installs `nut-admin` (Flask app on port 8081) for managing NUT configs via browser
 
 ## Supported UPS Vendors
 
@@ -34,8 +35,8 @@ Other USB UPS devices can be configured manually.
 - Proxmox VE 7.x or 8.x
 - Root access on Proxmox host
 - Internet connectivity (downloads Ubuntu cloud image)
-- `wget`, `ssh`, `scp`, `lsusb`, `nc` installed (usually present by default)
-- A USB UPS connected to the Proxmox host
+- `wget`, `ssh`, `scp`, `lsusb` installed (usually present by default)
+- A USB UPS connected to the Proxmox host (optional; can be configured manually or skipped)
 
 ## Installation
 
@@ -127,32 +128,31 @@ The script will guide you through:
    - Automatically scans for connected UPS devices
    - Presents list if multiple detected
    - Handles duplicate models using bus-port notation
+   - Can be skipped if no UPS is present or connected
 
 3. **NUT Configuration**
    - UPS name and description
-   - Driver selection (usbhid-ups recommended for most)
+   - Default driver (`usbhid-ups`; `nut-scanner` auto-detects inside the VM)
    - Admin and monitor user credentials
    - Listen address and port
 
 ## Example Output
 
-```
-╔═══════════════════════════════════════════════════════════╗
-║              NUT VM Setup - Complete!                     ║
-╠═══════════════════════════════════════════════════════════╣
-║  VM ID:          100                                      ║
-║  VM Name:        nut-server                               ║
-║  VM IP:          192.168.1.50                             ║
-║                                                           ║
-║  NUT Server:     192.168.1.50:3493                        ║
-║  UPS Name:       ups                                      ║
-║                                                           ║
-║  Test command:                                            ║
-║    upsc ups@192.168.1.50                                  ║
-╠═══════════════════════════════════════════════════════════╣
-║  Client upsmon.conf snippet:                              ║
-║  MONITOR ups@192.168.1.50:3493 1 monuser PASS slave       ║
-╚═══════════════════════════════════════════════════════════╝
+```text
+NUT VM Setup Complete!
+
+  VM ID:      100
+  VM Name:    nut-server
+  VM IP:      192.168.1.50
+
+  NUT Server: 192.168.1.50:3493
+  UPS Name:   ups
+
+  Test command:
+    upsc ups@192.168.1.50
+
+  Client upsmon.conf:
+    MONITOR ups@192.168.1.50:3493 1 monuser PASS slave
 ```
 
 ## Verification
@@ -212,7 +212,7 @@ systemctl restart nut-client
 
 ### VM IP Not Detected
 
-- Ensure QEMU Guest Agent is running in VM
+- The cloud-init vendor snippet automatically installs and enables QEMU Guest Agent on first boot; verify it is running: `systemctl status qemu-guest-agent`
 - Check DHCP server is functioning
 - Manually enter IP when prompted
 
@@ -236,11 +236,11 @@ Proxmox Host
 │                         ▼
 ├── vm/nut-vm.sh   VM (Ubuntu 24.04 minimal)
 │   ├── Downloads        │   ├── NUT Server
-│   ├── Creates VM ────►│   │   ├── nut-driver (usbhid-ups)
+│   ├── Creates VM ────► │   │   ├── nut-driver (usbhid-ups)
 │   ├── Detects UPS      │   │   ├── upsd (port 3493)
-│   ├── Configures ─────┘   │   └── upsmon
-│   └── Deploys via         └── SSH (temp keys)
-       embedded script
+│   ├── Configures  ─────┘   │   ├── upsmon
+│   └── Deploys via          │   └── nut-admin (port 8081)
+       embedded script       └── SSH (temp keys)
 ```
 
 ## License

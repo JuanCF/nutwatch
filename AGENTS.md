@@ -21,7 +21,7 @@ make test-python    # pytest on src/nut-admin/tests/
 make install-tools  # apt-get shellcheck shfmt python3-pytest
 ```
 
-CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` only (see `.github/workflows/lint.yml`). It does **not** run Python tests — `make check` does locally.
+CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see `.github/workflows/lint.yml`). `make check` reproduces the full local suite.
 
 ## Shell Conventions
 
@@ -34,7 +34,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` only (see `.github/workflows
 ## nut-vm.sh Architecture
 
 - Sources `build.func` and `cloud-init.func` at runtime via `curl` from `community-scripts/ProxmoxVED`.
-- Reimplements some helpers (spinner, colors) — a documented deviation from community-scripts conventions.
+- Sources `build.func` for helpers (spinner, colors, `msg_*`) but locally overrides `msg_error` to call `exit 1` (the community-scripts version logs and returns).
 - The NUT install script is embedded as a heredoc, SCP'd to the VM, executed via SSH.
 - The NUT admin install is a separate pipeline inside the heredoc; it can fail gracefully without killing the main NUT setup.
 - Cloud-init vendor snippet (`/var/lib/vz/snippets/nut-vm-${VM_ID}-cloudinit.yaml`) installs `qemu-guest-agent` on first boot. Required for `get_vm_ip()`. Do not remove.
@@ -55,7 +55,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` only (see `.github/workflows
 
 - Partial image download: uses `wget -c` for resume.
 - Duplicate `VENDOR:PRODUCT` UPS models: falls back to bus-port notation.
-- Slow DHCP / guest agent: retries for up to 2 minutes.
+- Slow DHCP / guest agent: retries for up to 5 minutes.
 - Special chars in passwords: single-quoted heredoc delimiters for remote config writes.
 - Script interruption: `trap INT TERM` kills spinner and prints interrupt message.
 - NUT driver service name varies by distro: `nut-driver-enumerator` → `nut-driver@` → `nut-driver`. The installer probes via `systemctl list-unit-files`.
