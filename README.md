@@ -138,7 +138,7 @@ The script will guide you through:
 
 ## Example Output
 
-```
+```text
 NUT VM Setup Complete!
 
   VM ID:      100
