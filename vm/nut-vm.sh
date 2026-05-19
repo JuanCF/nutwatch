@@ -736,13 +736,23 @@ get_vm_ip() {
   # Once cloud-init finishes (~3-5 min on first boot), the agent reports IPs directly.
   local ip="" elapsed=0 max_wait=300
 
+  if [[ -n "${VM_IP:-}" ]]; then
+    msg_ok "VM IP address (from VM_IP env): $VM_IP"
+    return 0
+  fi
+
   msg_info "Waiting for VM guest agent (cloud-init installs it on first boot, ~3-5 min)"
 
   while [[ $elapsed -lt $max_wait ]]; do
     ip=$(qm guest cmd "$VM_ID" network-get-interfaces 2>/dev/null | python3 -c "
 import sys, json
 try:
-    for iface in json.load(sys.stdin).get('result', []):
+    data = json.load(sys.stdin)
+    if isinstance(data, dict):
+        ifaces = data.get('result', [])
+    else:
+        ifaces = data
+    for iface in ifaces:
         for a in iface.get('ip-addresses', []):
             addr = a.get('ip-address', '')
             if (a.get('ip-address-type') == 'ipv4'
@@ -766,11 +776,6 @@ except Exception:
   done
 
   msg_warn "Guest agent did not respond after ${max_wait}s"
-
-  if [[ -n "${VM_IP:-}" ]]; then
-    msg_ok "VM IP address (from VM_IP env): $VM_IP"
-    return 0
-  fi
 
   VM_IP=$(whiptail --backtitle "Proxmox VE Helper Scripts" \
     --title "VM IP ADDRESS" \
