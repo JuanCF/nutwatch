@@ -38,7 +38,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` only (see `.github/workflows
 - The NUT install script is embedded as a heredoc, SCP'd to the VM, executed via SSH.
 - The NUT admin install is a separate pipeline inside the heredoc; it can fail gracefully without killing the main NUT setup.
 - Cloud-init vendor snippet (`/var/lib/vz/snippets/nut-vm-${VM_ID}-cloudinit.yaml`) installs `qemu-guest-agent` on first boot. Required for `get_vm_ip()`. Do not remove.
-- `get_vm_ip()` has a 2-minute retry loop using `qm guest exec`; falls back to manual IP entry.
+- `get_vm_ip()` has a 5-minute retry loop querying `network-get-interfaces` via the guest agent (`qm guest cmd <vmid> network-get-interfaces`); falls back to manual IP entry.
 - USB UPS detection parses `lsusb` and cross-references known vendor IDs. Duplicate models use bus-port notation (`host=4-1`).
 - Image is cached at `/var/lib/vz/template/iso` — not deleted after import.
 

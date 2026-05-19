@@ -453,7 +453,9 @@ inject_ssh_key() {
   TEMP_SSH_PUB="$TEMP_KEY_DIR/nut-setup-key.pub"
 
   cleanup_temp_keys() {
-    [[ -d "$TEMP_KEY_DIR" ]] && rm -rf "$TEMP_KEY_DIR"
+    if [[ -d "$TEMP_KEY_DIR" ]]; then
+      rm -rf "$TEMP_KEY_DIR"
+    fi
   }
   trap cleanup_temp_keys EXIT
 
@@ -732,17 +734,25 @@ wait_ssh() {
 get_vm_ip() {
   # Wait for the qemu-guest-agent installed by the cloud-init snippet.
   # Once cloud-init finishes (~3-5 min on first boot), the agent reports IPs directly.
+  local ip="" elapsed=0 max_wait=300
+
+  if [[ -n "${VM_IP:-}" ]]; then
+    msg_ok "VM IP address (from VM_IP env): $VM_IP"
+    return 0
+  fi
+
   msg_info "Waiting for VM guest agent (cloud-init installs it on first boot, ~3-5 min)"
 
-  local ip="" node elapsed=0 max_wait=120
-  node=$(hostname)
-
   while [[ $elapsed -lt $max_wait ]]; do
-    ip=$(pvesh get "/nodes/${node}/qemu/${VM_ID}/agent/network-get-interfaces" \
-      --output-format json 2>/dev/null | python3 -c "
+    ip=$(qm guest cmd "$VM_ID" network-get-interfaces 2>/dev/null | python3 -c "
 import sys, json
 try:
-    for iface in json.load(sys.stdin).get('result', []):
+    data = json.load(sys.stdin)
+    if isinstance(data, dict):
+        ifaces = data.get('result', [])
+    else:
+        ifaces = data
+    for iface in ifaces:
         for a in iface.get('ip-addresses', []):
             addr = a.get('ip-address', '')
             if (a.get('ip-address-type') == 'ipv4'
@@ -766,11 +776,14 @@ except Exception:
   done
 
   msg_warn "Guest agent did not respond after ${max_wait}s"
+
   VM_IP=$(whiptail --backtitle "Proxmox VE Helper Scripts" \
     --title "VM IP ADDRESS" \
     --inputbox "Enter VM IP address manually:" \
     8 58 "" 3>&1 1>&2 2>&3) || msg_error "No IP address provided"
-  [[ -z "$VM_IP" ]] && msg_error "No IP address provided"
+  if [[ -z "$VM_IP" ]]; then
+    msg_error "No IP address provided"
+  fi
 }
 
 #===============================================================================
