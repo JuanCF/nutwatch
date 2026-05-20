@@ -22,6 +22,8 @@ def add_user(data: dict) -> tuple:
     name = data.get("name", "").strip()
     if not name:
         return None, "name is required"
+    if not IDENTIFIER_REGEX.match(name):
+        return None, "invalid identifier"
     directives = data.get("directives")
     if directives is not None:
         for key in directives:
