@@ -1,0 +1,61 @@
+import re
+
+
+def parse_upsd_users(content: str) -> list:
+    entries = []
+    current = None
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        m = re.match(r"^\[(.+)\]$", stripped)
+        if m:
+            if current:
+                entries.append(current)
+            current = {"name": m.group(1), "directives": []}
+            continue
+        if current is None:
+            continue
+        if "=" in stripped:
+            key, val = stripped.split("=", 1)
+            key = key.strip()
+            val = val.strip()
+            if key == "password":
+                current["password"] = val
+            elif key == "upsmon":
+                current["upsmon"] = val
+            elif key == "actions":
+                current["actions"] = val
+            elif key == "instcmds":
+                current["instcmds"] = val
+            else:
+                current["directives"].append([key, val])
+        else:
+            parts = stripped.split(None, 1)
+            key = parts[0]
+            val = parts[1] if len(parts) > 1 else ""
+            if key == "upsmon":
+                current["upsmon"] = val
+            else:
+                current["directives"].append([key, val])
+    if current:
+        entries.append(current)
+    return entries
+
+
+def serialize_upsd_users(entries: list) -> str:
+    lines = []
+    for e in entries:
+        lines.append(f"[{e['name']}]")
+        if "password" in e:
+            lines.append(f"  password = {e['password']}")
+        if "actions" in e:
+            lines.append(f"  actions = {e['actions']}")
+        if "instcmds" in e:
+            lines.append(f"  instcmds = {e['instcmds']}")
+        if "upsmon" in e:
+            lines.append(f"  upsmon = {e['upsmon']}")
+        for key, val in e.get("directives", []):
+            lines.append(f"  {key} = {val}")
+        lines.append("")
+    return "\n".join(lines)

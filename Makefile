@@ -1,6 +1,22 @@
 SHELL_FILES := $(shell find vm/ src/ -name "*.sh")
 
-.PHONY: check lint fmt fmt-fix install-tools lint-python test-python
+.PHONY: check lint fmt fmt-fix install-tools lint-python test-python build-tarball
+
+TARBALL := nut-admin.tar.gz
+TARBALL_DIR := src/nut-admin
+
+build-tarball:
+	tar -czvf $(TARBALL) \
+		-C $(TARBALL_DIR) \
+		--exclude '__pycache__' \
+		--exclude '.pytest_cache' \
+		--exclude 'venv' \
+		--exclude 'tests' \
+		--exclude 'install.sh' \
+		__init__.py app.py auth.py config.py utils.py \
+		parsers/ services/ routes/ \
+		static/ \
+		nut-admin.service requirements.txt
 
 check: lint fmt lint-python test-python
 

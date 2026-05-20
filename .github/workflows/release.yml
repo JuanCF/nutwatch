@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  lint-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get install -y shellcheck shfmt
+
+      - name: shellcheck
+        run: find vm/ -name "*.sh" -print0 | xargs -0 shellcheck
+
+      - name: shfmt
+        run: find vm/ -name "*.sh" -print0 | xargs -0 shfmt -d -i 2
+
+  lint-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r src/nut-admin/requirements.txt
+
+      - name: Syntax check
+        run: find src/nut-admin -name '*.py' -print0 | xargs -0 python3 -m py_compile
+
+      - name: Tests
+        working-directory: src/nut-admin
+        run: python3 -m pytest tests/ -v
+
+  release:
+    needs: [lint-shell, lint-python]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build tarball
+        run: make build-tarball
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: nut-admin.tar.gz
+          generate_release_notes: true

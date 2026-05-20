@@ -67,6 +67,8 @@ readonly NUT_DEFAULT_PORT=3493
 readonly SSH_TIMEOUT=300
 readonly SSH_POLL_INTERVAL=5
 readonly SCRIPT_VERSION="1.0.0"
+readonly NUT_ADMIN_REF="${NUT_ADMIN_REF:-v1.0.0}"
+readonly NUT_ADMIN_RELEASES_URL="https://github.com/JuanCF/proxmox-nut-server/releases/download/${NUT_ADMIN_REF}"
 
 # shellcheck disable=SC2080
 readonly -a SSH_OPTS=(
@@ -976,13 +978,13 @@ print(script, end='')
 }
 
 build_nut_admin_script() {
-  local nut_admin_url_prefix
-  nut_admin_url_prefix="${NUT_ADMIN_URL_PREFIX:-https://raw.githubusercontent.com/JuanCF/proxmox-nut-server/main}"
+  local tarball_url
+  tarball_url="${NUT_ADMIN_URL_PREFIX:-${NUT_ADMIN_RELEASES_URL}}/nut-admin.tar.gz"
 
   NUT_ADMIN_SCRIPT=$(
     cat <<'NUT_ADMIN_HEREDOC'
 #!/usr/bin/env bash
-NUT_ADMIN_URL="__NUT_ADMIN_URL_PREFIX__"
+NUT_ADMIN_TARBALL_URL="__NUT_ADMIN_TARBALL_URL__"
 NUT_ADMIN_FAIL=0
 NUT_ADMIN_ERROR_LOG=""
 
@@ -1001,19 +1003,14 @@ fi
 
 if [[ $NUT_ADMIN_FAIL -eq 0 ]]; then
   echo "[NUT-ADMIN] Creating application directory..."
-  mkdir -p /opt/nut-admin/static
+  mkdir -p /opt/nut-admin
 
-  echo "[NUT-ADMIN] Downloading admin files..."
-  if ! curl -fsSL "${NUT_ADMIN_URL}/src/nut-admin/app.py" -o /opt/nut-admin/app.py; then
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] Failed to download app.py\n"
-    NUT_ADMIN_FAIL=1
-  fi
-  if ! curl -fsSL "${NUT_ADMIN_URL}/src/nut-admin/static/index.html" -o /opt/nut-admin/static/index.html; then
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] Failed to download index.html\n"
-    NUT_ADMIN_FAIL=1
-  fi
-  if ! curl -fsSL "${NUT_ADMIN_URL}/src/nut-admin/nut-admin.service" -o /etc/systemd/system/nut-admin.service; then
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] Failed to download nut-admin.service\n"
+  echo "[NUT-ADMIN] Downloading tarball..."
+  if curl -fsSL "${NUT_ADMIN_TARBALL_URL}" -o /tmp/nut-admin.tar.gz; then
+    tar -xzf /tmp/nut-admin.tar.gz -C /opt/nut-admin/
+    rm -f /tmp/nut-admin.tar.gz
+  else
+    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] Failed to download nut-admin tarball\n"
     NUT_ADMIN_FAIL=1
   fi
 fi
@@ -1023,8 +1020,18 @@ if [[ $NUT_ADMIN_FAIL -eq 0 ]]; then
   if ! python3 -m venv /opt/nut-admin/venv >/dev/null 2>&1; then
     NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] python3 -m venv failed\n"
     NUT_ADMIN_FAIL=1
-  elif ! /opt/nut-admin/venv/bin/pip install --quiet flask >/dev/null 2>&1; then
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] pip install flask failed\n"
+  elif ! /opt/nut-admin/venv/bin/pip install --quiet -r /opt/nut-admin/requirements.txt >/dev/null 2>&1; then
+    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] pip install requirements failed\n"
+    NUT_ADMIN_FAIL=1
+  fi
+fi
+
+if [[ $NUT_ADMIN_FAIL -eq 0 ]]; then
+  echo "[NUT-ADMIN] Installing systemd service..."
+  if [[ -f /opt/nut-admin/nut-admin.service ]]; then
+    cp /opt/nut-admin/nut-admin.service /etc/systemd/system/nut-admin.service
+  else
+    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] nut-admin.service not found in tarball\n"
     NUT_ADMIN_FAIL=1
   fi
 fi
@@ -1068,11 +1075,11 @@ NUT_ADMIN_HEREDOC
   )
 
   NUT_ADMIN_SCRIPT=$(
-    export PY_NUT_ADMIN_URL_PREFIX="$nut_admin_url_prefix"
+    export PY_NUT_ADMIN_TARBALL_URL="$tarball_url"
     python3 -c "
 import os, sys
 script = sys.stdin.read()
-script = script.replace('__NUT_ADMIN_URL_PREFIX__', os.environ['PY_NUT_ADMIN_URL_PREFIX'])
+script = script.replace('__NUT_ADMIN_TARBALL_URL__', os.environ['PY_NUT_ADMIN_TARBALL_URL'])
 print(script, end='')
 " <<<"$NUT_ADMIN_SCRIPT"
   )
