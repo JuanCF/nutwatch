@@ -25,9 +25,10 @@ reviews:
        community-scripts/ProxmoxVED. Reimplements spinner/colors/msg_* because
        `build.func`'s `msg_error` does not call `exit` — the local override
        adds `exit 1`. This is intentional; do NOT suggest replacing it.
-    2. **src/nut-admin/** — Flask SPA (app.py + static/index.html) that runs
-       inside the VM on port 8081 as a systemd service. Manages NUT config
-       files in /etc/nut/ via a REST API.
+    2. **src/nut-admin/** — Flask SPA (modular: app.py, auth.py, config.py,
+       utils.py, parsers/, services/, routes/, static/) that runs inside the VM
+       on port 8081 as a systemd service. Manages NUT config files in /etc/nut/
+       via a REST API.
 
     ## What NOT to comment on (linters already enforce these)
     - Shell quoting/bracing issues — shellcheck catches these via `make lint`
@@ -91,24 +92,26 @@ reviews:
           `build.func` and `cloud-init.func` from the community-scripts
           org; new external fetches need a checksum or pinned commit.
 
-    # Flask API app that writes /etc/nut/ configs and runs system commands.
+    # Flask API modules that write /etc/nut/ configs and run system commands.
     # Auth: Bearer token via NUT_ADMIN_API_KEY env var (disabled if empty).
-    - path: src/nut-admin/app.py
+    - path: src/nut-admin/**/*.py
       instructions: |
-        - Auth is Bearer token via `NUT_ADMIN_API_KEY` env var. If empty,
-          auth is disabled (all requests allowed). Flag any new route that
-          lacks the `@require_admin` decorator.
-        - Config writes must use `write_file()` (atomic tempfile + os.replace).
-          Never suggest `open(path, 'w')` for NUT config files.
-        - All name/path parameters must be validated with `IDENTIFIER_REGEX`
-          or checked against `ALLOWED_CONFIGS`. Flag any unvalidated input
-          passed to `os.path.join` or `subprocess.run`.
-        - `upsd.users` is read-only via the `/api/config/` endpoint (enforced).
-          Flag any PR that removes this guard.
+        - Auth is Bearer token via `NUT_ADMIN_API_KEY` env var (in `config.py`).
+          If empty, auth is disabled (all requests allowed). The `@require_admin`
+          decorator lives in `auth.py`. Flag any new route that lacks it.
+        - Config writes must use `write_file()` from `utils.py` (atomic tempfile
+          + os.replace). Never suggest `open(path, 'w')` for NUT config files.
+        - `IDENTIFIER_REGEX` and `ALLOWED_CONFIGS` live in `config.py`. All
+          name/path parameters in routes must be validated with one of these.
+          Flag any unvalidated input passed to `os.path.join` or
+          `subprocess.run`.
+        - `upsd.users` is read-only via the `/api/config/` endpoint (enforced in
+          `routes/system.py`). Flag any PR that removes this guard.
         - Passwords are masked (••••••) in API responses. Never suggest logging
           or returning plaintext passwords unnecessarily.
-        - `run_cmd` uses `subprocess.run` with a timeout. Flag any new
-          subprocess call that bypasses this (e.g., `os.system`, `shell=True`).
+        - `run_cmd` lives in `utils.py` and uses `subprocess.run` with a timeout.
+          Flag any new subprocess call that bypasses this (e.g., `os.system`,
+          `shell=True`).
 
     # Static SPA — no build step, no framework, vanilla HTML/CSS/JS.
     - path: src/nut-admin/static/**
@@ -124,17 +127,18 @@ reviews:
     - path: src/nut-admin/install.sh
       instructions: |
         - This runs as root inside the VM. Flag any `curl | sh` without
-          checksum verification. The current script pins `NUT_ADMIN_REF`
-          (a git sha) — flag changes that use a branch name instead.
-        - The script safely falls back between local files and remote curl.
-          Maintain this dual-mode behavior.
+          checksum verification. The script pins `NUT_ADMIN_REF` (a git tag like
+          v1.0.0) — flag changes that use a branch name or remove the pin.
+        - The script downloads a single tarball (`nut-admin.tar.gz`) and
+          unpacks it. Do not suggest restoring the old dual-mode behavior
+          (local file copy vs remote curl); that was intentionally removed.
 
     # Parser roundtrip tests.
     - path: src/nut-admin/tests/**
       instructions: |
-        - Tests import from `app` (not `src.nut-admin.app`) because they
-          run from `src/nut-admin/`. Do not suggest adding `__init__.py`
-          or restructuring the import path.
+        - Tests import from the package directly (e.g., `from parsers import
+          ...`, `from utils import ...`) because they run from `src/nut-admin/`.
+          Do not suggest adding `__init__.py` or restructuring import paths.
         - Focus on: roundtrip correctness (parse → serialize → parse),
           edge cases in NUT config syntax (comments, blank lines, extra
           directives), and not on test framework choices.
