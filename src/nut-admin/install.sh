@@ -1,37 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${NUT_ADMIN_REF:=7a6e201dbddd93223c4e47caa46783161575bcdd}"
-NUT_ADMIN_URL="${NUT_ADMIN_URL:-https://raw.githubusercontent.com/JuanCF/proxmox-nut-server/${NUT_ADMIN_REF}}"
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+: "${NUT_ADMIN_REF:=v1.0.0}"
+NUT_ADMIN_RELEASES_URL="https://github.com/JuanCF/proxmox-nut-server/releases/download/${NUT_ADMIN_REF}"
+NUT_ADMIN_TARBALL_URL="${NUT_ADMIN_URL_PREFIX:-${NUT_ADMIN_RELEASES_URL}}/nut-admin.tar.gz"
 
 echo "[NUT-ADMIN] Installing dependencies..."
 apt-get update -qq
-apt-get install -y python3-venv python3-pip nut-scanner curl
+apt-get install -y python3-venv python3-pip curl
 
 echo "[NUT-ADMIN] Creating application directory..."
-mkdir -p /opt/nut-admin/static
+mkdir -p /opt/nut-admin
 
-echo "[NUT-ADMIN] Deploying admin files..."
-if [[ -f "${SCRIPT_DIR}/app.py" ]]; then
-  cp "${SCRIPT_DIR}/app.py" /opt/nut-admin/app.py
-  cp "${SCRIPT_DIR}/static/index.html" /opt/nut-admin/static/index.html
-  if [[ -f "${SCRIPT_DIR}/nut-admin.service" ]]; then
-    cp "${SCRIPT_DIR}/nut-admin.service" /etc/systemd/system/nut-admin.service
-  else
-    curl -fsSL "${NUT_ADMIN_URL}/src/nut-admin/nut-admin.service" -o /etc/systemd/system/nut-admin.service
-  fi
-else
-  echo "[NUT-ADMIN] Downloading admin files from ${NUT_ADMIN_URL}..."
-  curl -fsSL "${NUT_ADMIN_URL}/src/nut-admin/app.py" -o /opt/nut-admin/app.py
-  curl -fsSL "${NUT_ADMIN_URL}/src/nut-admin/static/index.html" -o /opt/nut-admin/static/index.html
-  curl -fsSL "${NUT_ADMIN_URL}/src/nut-admin/nut-admin.service" -o /etc/systemd/system/nut-admin.service
-fi
+echo "[NUT-ADMIN] Downloading tarball from ${NUT_ADMIN_TARBALL_URL}..."
+curl -fsSL "${NUT_ADMIN_TARBALL_URL}" -o /tmp/nut-admin.tar.gz
+tar -xzf /tmp/nut-admin.tar.gz -C /opt/nut-admin/
+rm -f /tmp/nut-admin.tar.gz
 
 echo "[NUT-ADMIN] Setting up Python virtual environment..."
 python3 -m venv /opt/nut-admin/venv
-/opt/nut-admin/venv/bin/pip install --quiet flask
+/opt/nut-admin/venv/bin/pip install --quiet -r /opt/nut-admin/requirements.txt
 
 echo "[NUT-ADMIN] Enabling systemd service..."
 systemctl daemon-reload

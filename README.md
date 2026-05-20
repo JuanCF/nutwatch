@@ -85,7 +85,7 @@ bash nut-vm.sh
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VERBOSE` | _(unset)_ | Set to `yes` to show full command output. Same as `--debug` but without `set -x` trace. |
-| `NUT_ADMIN_URL_PREFIX` | `https://raw.githubusercontent.com/JuanCF/proxmox-nut-server/main` | Base URL for downloading nut-admin files inside the VM. Change to point to a fork or local mirror. |
+| `NUT_ADMIN_URL_PREFIX` | _(unset)_ | When set, overrides the default GitHub Releases URL for the nut-admin tarball. Useful for pointing at a local build or mirror. |
 
 By default, most commands (`qm`, `ssh`, etc.) are silenced. Set `VERBOSE=yes` or pass `--debug` to reveal output.
 
@@ -109,8 +109,51 @@ NUT_ADMIN_URL_PREFIX=https://example.com/my-fork bash vm/nut-vm.sh
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NUT_ADMIN_REF` | `7a6e201d…` (pinned sha) | Git commit sha used to construct the download URL when running from curl. Ignored when running from a cloned repo (local files are copied instead). |
-| `NUT_ADMIN_URL` | `https://raw.githubusercontent.com/JuanCF/proxmox-nut-server/${NUT_ADMIN_REF}` | Full download base URL. Overrides `NUT_ADMIN_REF` if set. |
+| `NUT_ADMIN_REF` | `v1.0.0` | Git tag used to construct the release download URL. |
+| `NUT_ADMIN_URL_PREFIX` | _(unset)_ | Base URL for downloading the nut-admin tarball. When set, overrides the GitHub releases URL. Useful for testing local builds. |
+
+## Deployment & Releases
+
+The nut-admin web UI is deployed inside the VM as a pre-built tarball.
+
+### How it works
+
+1. `vm/nut-vm.sh` embeds `src/nut-admin/install.sh` as a heredoc, SCPs it to the VM, and executes it.
+2. Inside the VM, `install.sh` downloads `nut-admin.tar.gz` from GitHub Releases (or a custom URL) and unpacks it to `/opt/nut-admin/`.
+3. A Python virtual environment is created, dependencies installed, and the systemd service started on port 8081.
+
+### Creating a release
+
+Push a version tag to trigger the automated release workflow:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The GitHub Actions workflow (`.github/workflows/release.yml`) will:
+1. Run lint checks (`shellcheck`, `shfmt`, Python syntax, pytest)
+2. Build `nut-admin.tar.gz` via `make build-tarball`
+3. Create a GitHub Release with the tarball as an asset
+
+To change which version `install.sh` downloads, update `NUT_ADMIN_REF` in `src/nut-admin/install.sh`.
+
+### Testing a local build
+
+Run `make build-tarball` to generate `nut-admin.tar.gz` from local source files. Serve it over HTTP and point the install script at it:
+
+```bash
+# Build the tarball
+make build-tarball
+
+# Serve it (e.g., with Python)
+python3 -m http.server 8080 --directory .
+
+# Run the VM setup pointing at your local server
+NUT_ADMIN_URL_PREFIX="http://<your-ip>:8080" bash vm/nut-vm.sh
+```
+
+The tarball is git-ignored (`.gitignore` contains `nut-admin.tar.gz`).
 
 ### Interactive Prompts
 
