@@ -5,7 +5,7 @@ Two components in this repo:
 | Path | What it is | Runs where |
 |------|-----------|------------|
 | `vm/nut-vm.sh` | Proxmox VM creation + NUT installer script | Proxmox host (as root) |
-| `src/nut-admin/` | Flask web UI for NUT config management | Inside the VM |
+| `src/nut-admin/` | Modular Flask web UI for NUT config management | Inside the VM |
 
 `plan.md` is a historical design spec — do **not** trust it literally; verify behavior in the actual scripts.
 
@@ -44,12 +44,12 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 
 ## nut-admin (src/nut-admin/)
 
-- Flask app (`app.py`) + static SPA (`static/index.html`).
+- Modular Flask app: `app.py` (bootstrap), `auth.py` (Bearer auth), `config.py` (constants), `utils.py` (helpers), `parsers/` (config parsers), `services/` (business logic), `routes/` (API blueprints), `static/` (SPA frontend).
 - Runs as `nut-admin.service` on port 8081 (configurable via `NUT_ADMIN_HOST`, `NUT_ADMIN_PORT` env vars).
 - Auth: Bearer token via `NUT_ADMIN_API_KEY` env var — if empty, auth is disabled.
 - Config writes use atomic `tempfile` + `os.replace`; input validated with `IDENTIFIER_REGEX`.
-- `install.sh` can deploy from local files (if running from cloned repo) or curl from GitHub (pinned by `NUT_ADMIN_REF` sha).
-- Unit tests in `tests/test_parsers.py` cover parser roundtrips. Import from `app` (not `src.nut-admin.app`) — tests run from `src/nut-admin/`.
+- `install.sh` downloads a pre-built tarball from GitHub Releases (pinned by `NUT_ADMIN_REF` tag). To test a local build, run `make build-tarball`, serve the tarball, and set `NUT_ADMIN_URL_PREFIX`.
+- Unit tests in `tests/test_parsers.py` cover parser roundtrips. Import from `parsers` or `utils` (not `src.nut-admin.app`) — tests run from `src/nut-admin/`.
 
 ## Edge Cases
 
