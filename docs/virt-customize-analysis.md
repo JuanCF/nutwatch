@@ -145,7 +145,7 @@ guest agent IP → print summary.
 
 ## Known Issues
 
-### virt-customize loses network access on Proxmox VE 9 (Trixie/Bookworm)
+### virt-customize loses network access on Proxmox VE 9 (Trixie)
 
 On Proxmox VE 9 (Debian 13/Trixie), `virt-customize` fails when running commands
 that require internet access inside the disk image (e.g. `--install`, `--run-command

@@ -1067,6 +1067,7 @@ cleanup_work_file() {
   [[ -n "${WORK_FILE:-}" ]] && rm -f "$WORK_FILE"
 }
 
+trap 'cleanup_work_file' EXIT
 trap '[[ -n "${SPINNER_PID:-}" ]] && kill "${SPINNER_PID:-}" 2>/dev/null; printf "\e[?25h"; cleanup_work_file; echo -e "\n${RD}Interrupted${CL}"; exit 130' INT TERM
 
 main "$@"
