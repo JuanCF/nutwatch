@@ -57,11 +57,13 @@ def serialize_upsd_users(entries: list) -> str:
         lines.append(f"[{name}]")
         for field in known_fields:
             if field in e:
-                val = e[field]
+                val = str(e[field])
                 if "\n" in val or "\r" in val:
                     raise ValueError(f"Invalid {field}: contains newline")
                 lines.append(f"  {field} = {val}")
         for key, val in e.get("directives", []):
+            key = str(key)
+            val = str(val)
             if "\n" in key or "\r" in key:
                 raise ValueError(f"Invalid directive key: contains newline")
             if not IDENTIFIER_REGEX.match(key):
