@@ -35,9 +35,8 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 
 - Sources `build.func` and `cloud-init.func` at runtime via `curl` from `community-scripts/ProxmoxVED`.
 - Sources `build.func` for helpers (spinner, colors, `msg_*`) but locally overrides `msg_error` to call `exit 1` (the community-scripts version logs and returns).
-- The NUT install script is embedded as a heredoc, SCP'd to the VM, executed via SSH.
-- The NUT admin install is a separate pipeline inside the heredoc; it can fail gracefully without killing the main NUT setup.
-- Cloud-init vendor snippet (`/var/lib/vz/snippets/nut-vm-${VM_ID}-cloudinit.yaml`) installs `qemu-guest-agent` on first boot. Required for `get_vm_ip()`. Do not remove.
+- Uses `virt-customize` for offline disk image modification: installs packages, writes NUT configs, creates a `nut-detect` oneshot systemd service, and installs nut-admin directly into the disk image before the VM is created.
+- Cloud-init handles first-boot network configuration, rootfs resize, and SSH host key generation. A vendor snippet (`/var/lib/vz/snippets/nut-vm-${VM_ID}-cloudinit.yaml`) sets the user password.
 - `get_vm_ip()` has a 5-minute retry loop querying `network-get-interfaces` via the guest agent (`qm guest cmd <vmid> network-get-interfaces`); falls back to manual IP entry.
 - USB UPS detection parses `lsusb` and cross-references known vendor IDs. Duplicate models use bus-port notation (`host=4-1`).
 - Image is cached at `/var/lib/vz/template/iso` — not deleted after import.
@@ -56,6 +55,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 - Partial image download: uses `wget -c` for resume.
 - Duplicate `VENDOR:PRODUCT` UPS models: falls back to bus-port notation.
 - Slow DHCP / guest agent: retries for up to 5 minutes.
-- Special chars in passwords: single-quoted heredoc delimiters for remote config writes.
-- Script interruption: `trap INT TERM` kills spinner and prints interrupt message.
-- NUT driver service name varies by distro: `nut-driver-enumerator` → `nut-driver@` → `nut-driver`. The installer probes via `systemctl list-unit-files`.
+- virt-customize network failure on Debian 13 (Proxmox VE 9): auto-installs `dhcpcd-base` when missing.
+- NUT service enablement varies by distro: `nut-driver-enumerator` → `nut-driver@` → `nut-driver`. Each unit is enabled individually with `|| true` so missing units don't abort the whole run.
+- nut-admin install failure inside virt-customize: wrapped in `&& ... || echo` so a download failure doesn't abort the VM setup.
+- Script interruption: `trap INT TERM` kills spinner, cleans up working disk image, and prints interrupt message.
