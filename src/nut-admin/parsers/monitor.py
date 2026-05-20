@@ -1,5 +1,6 @@
 import re
 
+from config import IDENTIFIER_REGEX
 from .upsd_users import parse_upsd_users
 
 MONITOR_RE = re.compile(
@@ -38,6 +39,12 @@ def remove_monitor_line(content: str, upsname: str) -> str:
 def add_monitor_line(
     content: str, upsname: str, power: int, username: str, password: str, role: str
 ) -> str:
+    for field_name, value in [("upsname", upsname), ("username", username),
+                               ("password", password), ("role", role)]:
+        if "\n" in value or "\r" in value:
+            raise ValueError(f"Invalid {field_name}: contains newline")
+        if not IDENTIFIER_REGEX.match(value):
+            raise ValueError(f"Invalid {field_name}: {value!r}")
     hostspec = "@localhost"
     line = f"MONITOR {upsname}{hostspec} {power} {username} {password} {role}"
     if content and not content.endswith("\n"):

@@ -1,6 +1,6 @@
 import os
 
-from config import NUT_DIR
+from config import NUT_DIR, IDENTIFIER_REGEX
 from parsers.ups_conf import parse_ups_conf, serialize_ups_conf
 from parsers.monitor import parse_monitor_lines, add_monitor_line, remove_monitor_line, find_monitor_user
 from parsers.nut_scanner import parse_nut_scanner_output
@@ -37,6 +37,10 @@ def add_ups(data: dict) -> tuple:
     if not name:
         return None, "name is required"
     directives = data.get("directives")
+    if directives is not None:
+        for key in directives:
+            if not IDENTIFIER_REGEX.match(key):
+                return None, f"invalid directive key: {key!r}"
 
     path = os.path.join(NUT_DIR, "ups.conf")
     try:
@@ -100,6 +104,8 @@ def edit_ups(name: str, data: dict):
             if directives is not None:
                 e["directives"] = []
                 for k, v in directives.items():
+                    if not IDENTIFIER_REGEX.match(k):
+                        continue
                     e["directives"].append([k, v])
             write_file(path, serialize_ups_conf(entries))
             e["status"] = ups_status(name)

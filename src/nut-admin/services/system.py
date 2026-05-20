@@ -42,5 +42,8 @@ def put_config(filename: str, content: str):
     if filename == "upsd.users":
         return False
     path = os.path.join(NUT_DIR, filename)
-    write_file(path, content)
+    try:
+        write_file(path, content)
+    except OSError:
+        return False
     return True

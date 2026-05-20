@@ -1,6 +1,6 @@
 import os
 
-from config import NUT_DIR
+from config import NUT_DIR, IDENTIFIER_REGEX
 from parsers.upsd_users import parse_upsd_users, serialize_upsd_users
 from utils import read_file, write_file
 
@@ -23,6 +23,10 @@ def add_user(data: dict) -> tuple:
     if not name:
         return None, "name is required"
     directives = data.get("directives")
+    if directives is not None:
+        for key in directives:
+            if not IDENTIFIER_REGEX.match(key):
+                return None, f"invalid directive key: {key!r}"
 
     path = os.path.join(NUT_DIR, "upsd.users")
     try:
@@ -60,6 +64,8 @@ def edit_user(name: str, data: dict):
             if directives is not None:
                 e["directives"] = []
                 for k, v in directives.items():
+                    if not IDENTIFIER_REGEX.match(k):
+                        continue
                     e["directives"].append([k, v])
             write_file(path, serialize_upsd_users(entries))
             e["password"] = PASSWORD_PLACEHOLDER

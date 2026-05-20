@@ -20,6 +20,8 @@ def parse_nut_scanner_output(stdout: str) -> list:
             key, val = stripped.split("=", 1)
             key = key.strip()
             val = val.strip().strip('"')
+            if key.startswith("###NOTMATCHED-YET###"):
+                continue  # scanner flag for unmapped HID attributes, not valid NUT directives
             current["directives"][key] = val
     if current:
         devices.append(current)

@@ -1,5 +1,7 @@
 import re
 
+from config import IDENTIFIER_REGEX
+
 
 def parse_upsd_users(content: str) -> list:
     entries = []
@@ -44,18 +46,28 @@ def parse_upsd_users(content: str) -> list:
 
 
 def serialize_upsd_users(entries: list) -> str:
+    known_fields = ("password", "actions", "instcmds", "upsmon")
     lines = []
     for e in entries:
-        lines.append(f"[{e['name']}]")
-        if "password" in e:
-            lines.append(f"  password = {e['password']}")
-        if "actions" in e:
-            lines.append(f"  actions = {e['actions']}")
-        if "instcmds" in e:
-            lines.append(f"  instcmds = {e['instcmds']}")
-        if "upsmon" in e:
-            lines.append(f"  upsmon = {e['upsmon']}")
+        name = e["name"]
+        if "\n" in name or "\r" in name:
+            raise ValueError(f"Invalid section name: contains newline")
+        if not IDENTIFIER_REGEX.match(name):
+            raise ValueError(f"Invalid section name: {name!r}")
+        lines.append(f"[{name}]")
+        for field in known_fields:
+            if field in e:
+                val = e[field]
+                if "\n" in val or "\r" in val:
+                    raise ValueError(f"Invalid {field}: contains newline")
+                lines.append(f"  {field} = {val}")
         for key, val in e.get("directives", []):
+            if "\n" in key or "\r" in key:
+                raise ValueError(f"Invalid directive key: contains newline")
+            if not IDENTIFIER_REGEX.match(key):
+                raise ValueError(f"Invalid directive key: {key!r}")
+            if "\n" in val or "\r" in val:
+                raise ValueError(f"Invalid directive value for {key!r}: contains newline")
             lines.append(f"  {key} = {val}")
         lines.append("")
     return "\n".join(lines)

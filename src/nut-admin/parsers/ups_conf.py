@@ -1,5 +1,7 @@
 import re
 
+from config import IDENTIFIER_REGEX
+
 
 def parse_ups_conf(content: str) -> list:
     entries = []
@@ -36,7 +38,10 @@ def parse_ups_conf(content: str) -> list:
 def serialize_ups_conf(entries: list) -> str:
     lines = []
     for e in entries:
-        lines.append(f"[{e['name']}]")
+        name = e["name"]
+        if not IDENTIFIER_REGEX.match(name):
+            raise ValueError(f"Invalid UPS section name: {name!r}")
+        lines.append(f"[{name}]")
         if "driver" in e:
             lines.append(f"  driver = {e['driver']}")
         if "port" in e:
@@ -44,6 +49,8 @@ def serialize_ups_conf(entries: list) -> str:
         if "desc" in e:
             lines.append(f'  desc = "{e["desc"]}"')
         for key, val in e.get("directives", []):
+            if not IDENTIFIER_REGEX.match(key):
+                raise ValueError(f"Invalid directive key: {key!r}")
             lines.append(f"  {key} = {val}")
         lines.append("")
     return "\n".join(lines)
