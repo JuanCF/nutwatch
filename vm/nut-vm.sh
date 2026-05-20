@@ -5,6 +5,8 @@
 # Creates an Ubuntu 24.04 VM on Proxmox, configures USB passthrough for UPS,
 # and installs/configures NUT (Network UPS Tools) in netserver mode.
 #
+# Uses virt-customize for offline disk image modification — no SSH.
+#
 # Must be run as root on a Proxmox host.
 
 # Consumed by build.func via source on line 18 — shellcheck can’t follow non-constant sources.
@@ -25,6 +27,8 @@ source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxV
 
 SPINNER_PID=""
 SCRIPT_ERROR_LOG=()
+WORK_FILE=""
+CLOUDINIT_SNIPPET=""
 
 # build.func's msg_error prints but does not call exit; override to add exit 1
 # so that check_root, check_proxmox, and whiptail cancellations abort the script.
@@ -64,19 +68,9 @@ readonly UBUNTU_IMG_CHECKSUM_URL="https://cloud-images.ubuntu.com/minimal/releas
 readonly UBUNTU_IMG_NAME="ubuntu-24.04-minimal-cloudimg-amd64.img"
 readonly IMG_CACHE_DIR="/var/lib/vz/template/iso"
 readonly NUT_DEFAULT_PORT=3493
-readonly SSH_TIMEOUT=300
-readonly SSH_POLL_INTERVAL=5
 readonly SCRIPT_VERSION="1.0.0"
 readonly NUT_ADMIN_REF="${NUT_ADMIN_REF:-v1.0.0}"
 readonly NUT_ADMIN_RELEASES_URL="https://github.com/JuanCF/proxmox-nut-server/releases/download/${NUT_ADMIN_REF}"
-
-# shellcheck disable=SC2080
-readonly -a SSH_OPTS=(
-  -o StrictHostKeyChecking=no
-  -o UserKnownHostsFile=/dev/null
-  -o GSSAPIAuthentication=no
-  -o PasswordAuthentication=no
-)
 
 # UPS Vendor IDs
 # shellcheck disable=SC2034
@@ -254,7 +248,7 @@ check_proxmox() {
 check_dependencies() {
   local missing=()
 
-  for cmd in ssh scp wget curl lsusb whiptail timeout openssl ssh-keygen ip sha256sum dpkg; do
+  for cmd in wget curl lsusb whiptail timeout openssl ip sha256sum dpkg; do
     if ! command -v "$cmd" &>/dev/null; then
       missing+=("$cmd")
     fi
@@ -264,6 +258,28 @@ check_dependencies() {
     msg_error "Missing required dependencies: ${missing[*]}"
   fi
   msg_ok "Dependencies satisfied"
+}
+
+check_virt_customize() {
+  if ! command -v virt-customize &>/dev/null; then
+    msg_info "virt-customize not found, installing libguestfs-tools..."
+    if ! apt-get update -qq >/dev/null 2>&1 || ! apt-get install -y -qq libguestfs-tools >/dev/null 2>&1; then
+      msg_error "Failed to install libguestfs-tools"
+    fi
+  fi
+
+  local debian_version
+  debian_version=$(lsb_release -rs 2>/dev/null || cat /etc/debian_version 2>/dev/null || echo "unknown")
+  if [[ "$debian_version" == "13" ]] || [[ "$debian_version" == "trixie" ]] || [[ "$debian_version" == "13."* ]]; then
+    if ! dpkg -l | grep -q "^ii  dhcpcd-base "; then
+      msg_info "Installing dhcpcd-base for virt-customize network support on Debian 13..."
+      if ! apt-get install -y -qq dhcpcd-base >/dev/null 2>&1; then
+        msg_warn "Failed to install dhcpcd-base — virt-customize network commands may fail"
+      fi
+    fi
+  fi
+
+  msg_ok "virt-customize available"
 }
 
 check_architecture() {
@@ -400,7 +416,7 @@ determine_storage_type() {
 }
 
 #===============================================================================
-# Section 7: Cloud Image Download + SSH Key + Cloud-Init Snippet
+# Section 7: Cloud Image Download
 #===============================================================================
 
 get_img_checksum() {
@@ -445,25 +461,6 @@ download_cloud_image() {
   msg_ok "Downloaded and verified Ubuntu 24.04 cloud image"
 }
 
-inject_ssh_key() {
-  TEMP_KEY_DIR="/tmp/nut-setup-$$"
-  mkdir -p "$TEMP_KEY_DIR"
-
-  $STD ssh-keygen -t ed25519 -f "$TEMP_KEY_DIR/nut-setup-key" -N "" -C "nut-setup-temp"
-
-  TEMP_SSH_KEY="$TEMP_KEY_DIR/nut-setup-key"
-  TEMP_SSH_PUB="$TEMP_KEY_DIR/nut-setup-key.pub"
-
-  cleanup_temp_keys() {
-    if [[ -d "$TEMP_KEY_DIR" ]]; then
-      rm -rf "$TEMP_KEY_DIR"
-    fi
-  }
-  trap cleanup_temp_keys EXIT
-
-  msg_ok "Generated temporary SSH keys"
-}
-
 generate_cloudinit_snippet() {
   local snippet_path="/var/lib/vz/snippets/nut-vm-${VM_ID}-cloudinit.yaml"
   CLOUDINIT_SNIPPET=""
@@ -476,20 +473,16 @@ generate_cloudinit_snippet() {
     else
       pvesm set local --content "vztmpl,iso,backup,snippets" 2>/dev/null || true
     fi
-    # Re-read config to confirm the update took effect
     cfg_content=$(awk '$1 == "dir:" && $2 == "local" {f=1} f && /content/{print $2; exit}' /etc/pve/storage.cfg 2>/dev/null || echo "")
     if [[ "$cfg_content" != *snippets* ]]; then
       msg_warn "Could not enable snippets on local storage — vendor cloud-init snippet will be skipped"
-      msg_warn "VM IP detection will fall back to manual entry after boot"
+      msg_warn "VM IP detection may fall back to manual entry after boot"
       return 0
     fi
   fi
 
   mkdir -p "/var/lib/vz/snippets"
 
-  # Embed the user-supplied password into the vendor snippet so it never
-  # appears on a Proxmox command line.  Residual risk: password at rest in
-  # /var/lib/vz/snippets until the file is manually removed.
   python3 -c "
 import sys
 with open(sys.argv[1], 'w') as f:
@@ -498,12 +491,6 @@ with open(sys.argv[1], 'w') as f:
     f.write('  list: |\n')
     f.write('    ' + sys.argv[2] + ':' + sys.argv[3] + '\n')
     f.write('  expire: False\n')
-    f.write('ssh_pwauth: True\n')
-    f.write('package_update: true\n')
-    f.write('packages:\n')
-    f.write('  - qemu-guest-agent\n')
-    f.write('runcmd:\n')
-    f.write('  - systemctl enable --now qemu-guest-agent\n')
 " "$snippet_path" "$VM_USER" "$VM_PASSWORD"
   chmod 600 "$snippet_path"
 
@@ -512,12 +499,210 @@ with open(sys.argv[1], 'w') as f:
 }
 
 #===============================================================================
-# Section 8: VM Creation
+# Section 8: virt-customize Offline Disk Modification
+#===============================================================================
+
+virt_customize_image() {
+  local img_path="$IMG_CACHE_DIR/$UBUNTU_IMG_NAME"
+  WORK_FILE="/tmp/nut-vm-${VM_ID}-work.img"
+
+  msg_info "Preparing working disk image for virt-customize"
+  cp -f "$img_path" "$WORK_FILE"
+
+  local tmp_dir
+  tmp_dir=$(mktemp -d)
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmp_dir'" RETURN
+
+  #-----------------------------------------------------------------
+  # Write NUT config files locally
+  #-----------------------------------------------------------------
+  printf 'MODE=netserver\n' >"$tmp_dir/nut.conf"
+
+  printf '[%s]\n  driver = %s\n  port = auto\n  desc = "%s"\n  pollinterval = 2\n' \
+    "$NUT_UPS_NAME" "$NUT_DRIVER" "$NUT_UPS_DESC" >"$tmp_dir/ups.conf"
+
+  printf 'LISTEN %s %s\nMAXAGE 15\nSTATEPATH /var/run/nut\n' \
+    "$NUT_LISTEN_ADDR" "$NUT_LISTEN_PORT" >"$tmp_dir/upsd.conf"
+
+  printf '[%s]\n  password = %s\n  actions = SET\n  instcmds = ALL\n\n[%s]\n  password = %s\n  upsmon master\n' \
+    "$NUT_ADMIN_USER" "$NUT_ADMIN_PASS" "$NUT_MONITOR_USER" "$NUT_MONITOR_PASS" >"$tmp_dir/upsd.users"
+
+  cat >"$tmp_dir/upsmon.conf" <<'UPSMON_EOF'
+MONITOR __UPS_NAME__@localhost:__LISTEN_PORT__ 1 __MONITOR_USER__ __MONITOR_PASS__ master
+
+MINSUPPLIES 1
+SHUTDOWNCMD "/sbin/shutdown -h +0"
+POLLFREQ 5
+POLLFREQALERT 5
+HOSTSYNC 15
+DEADTIME 15
+POWERDOWNFLAG /etc/killpower
+
+NOTIFYMSG ONLINE    "UPS %s on line power"
+NOTIFYMSG ONBATT    "UPS %s on battery"
+NOTIFYMSG LOWBATT   "UPS %s battery is low"
+NOTIFYMSG COMMOK    "Communications with UPS %s established"
+NOTIFYMSG COMMBAD   "Communications with UPS %s lost"
+NOTIFYMSG SHUTDOWN  "UPS %s forcing system shutdown"
+
+NOTIFYFLAG ONLINE   SYSLOG+WALL
+NOTIFYFLAG ONBATT   SYSLOG+WALL
+NOTIFYFLAG LOWBATT  SYSLOG+WALL
+RBWARNTIME 43200
+NOCOMMWARNTIME 300
+FINALDELAY 5
+UPSMON_EOF
+
+  sed -i \
+    -e "s/__UPS_NAME__/$NUT_UPS_NAME/g" \
+    -e "s/__LISTEN_PORT__/$NUT_LISTEN_PORT/g" \
+    -e "s/__MONITOR_USER__/$NUT_MONITOR_USER/g" \
+    -e "s/__MONITOR_PASS__/$NUT_MONITOR_PASS/g" \
+    "$tmp_dir/upsmon.conf"
+
+  #-----------------------------------------------------------------
+  # Write nut-detect oneshot script + systemd service
+  #-----------------------------------------------------------------
+  cat >"$tmp_dir/nut-detect.sh" <<'DETECT_EOF'
+#!/bin/bash
+nut-scanner -U > /tmp/nut-scan.txt
+DRIVER=$(awk -F'"' '/driver/ {print $2; exit}' /tmp/nut-scan.txt)
+PORT=$(awk -F'"' '/port/ {print $2; exit}' /tmp/nut-scan.txt)
+VENDORID=$(awk -F'"' '/vendorid/ {print $2; exit}' /tmp/nut-scan.txt)
+PRODUCTID=$(awk -F'"' '/productid/ {print $2; exit}' /tmp/nut-scan.txt)
+
+{
+  printf "[%s]\n" "__UPS_NAME__"
+  printf "  driver = %s\n" "${DRIVER:-usbhid-ups}"
+  printf "  port = %s\n" "${PORT:-auto}"
+  [[ -n "$VENDORID" ]] && printf "  vendorid = %s\n" "$VENDORID"
+  [[ -n "$PRODUCTID" ]] && printf "  productid = %s\n" "$PRODUCTID"
+  printf "  desc = \"%s\"\n" "__UPS_DESC__"
+  printf "  pollinterval = 2\n"
+} > /etc/nut/ups.conf
+
+chown root:nut /etc/nut/ups.conf
+chmod 640 /etc/nut/ups.conf
+systemctl restart nut-driver nut-server nut-monitor
+touch /var/lib/nut/driver-detected
+DETECT_EOF
+
+  sed -i \
+    -e "s/__UPS_NAME__/$NUT_UPS_NAME/g" \
+    -e "s/__UPS_DESC__/$NUT_UPS_DESC/g" \
+    "$tmp_dir/nut-detect.sh"
+
+  cat >"$tmp_dir/nut-detect.service" <<'SERVICE_EOF'
+[Unit]
+Description=Auto-detect UPS driver on first boot
+After=multi-user.target
+ConditionPathExists=!/var/lib/nut/driver-detected
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nut-detect.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_EOF
+
+  #-----------------------------------------------------------------
+  # Build virt-customize command
+  #-----------------------------------------------------------------
+  local vc_cmd=(virt-customize -a "$WORK_FILE")
+
+  [[ "${VERBOSE:-}" == "yes" ]] && vc_cmd+=(-v)
+
+  # Install packages
+  vc_cmd+=(--install "qemu-guest-agent,nut-server,nut-client,python3-venv,python3-pip,curl,usbutils")
+
+  # Update packages
+  vc_cmd+=(--update)
+  vc_cmd+=(--run-command "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq")
+
+  # Upload NUT configs
+  vc_cmd+=(--upload "$tmp_dir/nut.conf:/etc/nut/nut.conf")
+  vc_cmd+=(--upload "$tmp_dir/ups.conf:/etc/nut/ups.conf")
+  vc_cmd+=(--upload "$tmp_dir/upsd.conf:/etc/nut/upsd.conf")
+  vc_cmd+=(--upload "$tmp_dir/upsd.users:/etc/nut/upsd.users")
+  vc_cmd+=(--upload "$tmp_dir/upsmon.conf:/etc/nut/upsmon.conf")
+
+  # Upload nut-detect script + service
+  vc_cmd+=(--upload "$tmp_dir/nut-detect.sh:/usr/local/bin/nut-detect.sh")
+  vc_cmd+=(--run-command "chmod +x /usr/local/bin/nut-detect.sh")
+  vc_cmd+=(--upload "$tmp_dir/nut-detect.service:/etc/systemd/system/nut-detect.service")
+
+  # Set permissions
+  vc_cmd+=(--run-command 'chown root:nut /etc/nut/*.conf && chmod 640 /etc/nut/*.conf')
+  vc_cmd+=(--run-command 'mkdir -p /var/run/nut && chown nut:nut /var/run/nut')
+
+  # Library symlinks for nut-scanner
+  vc_cmd+=(--run-command 'ln -sf /usr/lib/x86_64-linux-gnu/libusb-1.0.so.0 /usr/lib/x86_64-linux-gnu/libusb-1.0.so || true')
+  vc_cmd+=(--run-command 'ln -sf /usr/lib/x86_64-linux-gnu/libnetsnmp.so.40 /usr/lib/x86_64-linux-gnu/libnetsnmp.so || true')
+  vc_cmd+=(--run-command 'ln -sf /usr/lib/x86_64-linux-gnu/libneon-gnutls.so.27 /usr/lib/x86_64-linux-gnu/libneon.so || true')
+  vc_cmd+=(--run-command 'ln -sf /usr/lib/x86_64-linux-gnu/libavahi-client.so.3 /usr/lib/x86_64-linux-gnu/libavahi-client.so || true')
+  vc_cmd+=(--run-command 'ln -sf /usr/lib/x86_64-linux-gnu/libfreeipmi.so.17 /usr/lib/x86_64-linux-gnu/libfreeipmi.so || true')
+  vc_cmd+=(--run-command 'ln -sf /usr/lib/x86_64-linux-gnu/libupsclient.so.6 /usr/lib/x86_64-linux-gnu/libupsclient.so || true')
+
+  # Enable services
+  vc_cmd+=(--run-command 'systemctl enable qemu-guest-agent')
+  vc_cmd+=(--run-command 'systemctl enable nut-detect')
+
+  # Enable NUT services based on available systemd units
+  vc_cmd+=(--run-command '
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl enable nut-server 2>/dev/null || true
+    systemctl enable nut-monitor 2>/dev/null || true
+    if [ -f /lib/systemd/system/nut-driver-enumerator.service ]; then
+      systemctl enable nut-driver-enumerator.service 2>/dev/null || true
+      systemctl enable nut-driver-enumerator.path 2>/dev/null || true
+      systemctl enable nut-driver-target 2>/dev/null || true
+    elif [ -f /lib/systemd/system/nut-driver@.service ]; then
+      systemctl enable nut-driver@'"$NUT_UPS_NAME"' 2>/dev/null || true
+    else
+      systemctl enable nut-driver 2>/dev/null || true
+    fi
+  ')
+
+  # nut-admin install (graceful failure)
+  local tarball_url="${NUT_ADMIN_URL_PREFIX:-${NUT_ADMIN_RELEASES_URL}}/nut-admin.tar.gz"
+  # shellcheck disable=SC2016
+  vc_cmd+=(--run-command '
+    TARBALL_URL="'"$tarball_url"'"
+    curl -fsSL "$TARBALL_URL" -o /tmp/nut-admin.tar.gz && \
+    mkdir -p /opt/nut-admin && tar -xzf /tmp/nut-admin.tar.gz -C /opt/nut-admin/ && \
+    python3 -m venv /opt/nut-admin/venv && \
+    /opt/nut-admin/venv/bin/pip install -q -r /opt/nut-admin/requirements.txt && \
+    cp /opt/nut-admin/nut-admin.service /etc/systemd/system/ && \
+    systemctl enable nut-admin || \
+    echo "[WARN] NUT Admin installation failed, continuing"
+  ')
+
+  # System bootstrap
+  vc_cmd+=(--hostname "$VM_NAME")
+  vc_cmd+=(--run-command 'rm -f /etc/machine-id && touch /etc/machine-id')
+  vc_cmd+=(--run-command 'systemctl enable ssh')
+
+  local vcout="/tmp/nut-vm-${VM_ID}-virt-customize.log"
+  msg_info "Running virt-customize (this may take a few minutes)..."
+  if ! "${vc_cmd[@]}" >"$vcout" 2>&1; then
+    cat "$vcout"
+    rm -f "$vcout" "$WORK_FILE"
+    msg_error "virt-customize failed"
+  fi
+  [[ "${VERBOSE:-}" == "yes" ]] && cat "$vcout"
+  rm -f "$vcout"
+
+  msg_ok "Disk image customized successfully"
+}
+
+#===============================================================================
+# Section 9: VM Creation
 #===============================================================================
 
 create_vm() {
-  local img_path="$IMG_CACHE_DIR/$UBUNTU_IMG_NAME"
-
   generate_cloudinit_snippet
   determine_storage_type
 
@@ -535,12 +720,14 @@ create_vm() {
     --tags 'community-script;nut;network;ups'
   msg_ok "Created VM $VM_ID"
 
-  msg_info "Importing disk image"
+  msg_info "Importing customized disk image"
   [[ "${VERBOSE:-}" == "yes" ]] && set -x
-  if ! $STD qm importdisk "$VM_ID" "$img_path" "$VM_STORAGE" "${DISK_IMPORT[@]}"; then
+  if ! $STD qm importdisk "$VM_ID" "$WORK_FILE" "$VM_STORAGE" "${DISK_IMPORT[@]}"; then
     msg_error "Failed to import disk"
   fi
   [[ "${VERBOSE:-}" == "yes" ]] && set +x
+  rm -f "$WORK_FILE"
+  WORK_FILE=""
   msg_ok "Imported disk image"
 
   msg_info "Configuring VM"
@@ -549,16 +736,9 @@ create_vm() {
   $STD qm resize "$VM_ID" scsi0 "${VM_DISK_GB}G"
   $STD qm set "$VM_ID" --boot c --bootdisk scsi0
 
-  # setup_cloud_init generates a random password; the real password is injected
-  # via the vendor cloud-init snippet (see generate_cloudinit_snippet) so it
-  # never appears on a Proxmox command line.
-  # CLOUDINIT_SSH_KEYS is read by cloud-init.func (sourced on line 19); shellcheck
-  # can’t track usage across non-constant source directives.
   # shellcheck disable=SC2034
-  CLOUDINIT_SSH_KEYS="$TEMP_SSH_PUB"
+  CLOUDINIT_SSH_KEYS=""
   setup_cloud_init "$VM_ID" "$VM_STORAGE" "$VM_NAME" "yes" "$VM_USER"
-  # Vendor snippet installs qemu-guest-agent and sets the user password on first
-  # boot (required for get_vm_ip and for SSH login).
   if [[ -n "${CLOUDINIT_SNIPPET:-}" ]]; then
     $STD qm set "$VM_ID" --cicustom "vendor=local:snippets/nut-vm-${VM_ID}-cloudinit.yaml"
   fi
@@ -567,7 +747,7 @@ create_vm() {
 }
 
 #===============================================================================
-# Section 9: USB Detection + Passthrough
+# Section 10: USB Detection + Passthrough
 #===============================================================================
 
 prompt_ups_manual_entry() {
@@ -692,7 +872,7 @@ setup_usb_passthrough() {
 }
 
 #===============================================================================
-# Section 10: VM Boot + SSH Readiness Wait
+# Section 11: VM Boot + Guest Agent IP Detection
 #===============================================================================
 
 start_vm() {
@@ -705,37 +885,9 @@ start_vm() {
   msg_ok "VM started"
 }
 
-wait_port() {
-  local host="$1" port="${2:-22}" timeout_sec="${3:-$SSH_TIMEOUT}" sleep_sec="${4:-5}" label="${5:-}"
-  local start=$SECONDS last_report=0
-  while ((SECONDS - start < timeout_sec)); do
-    # shellcheck disable=SC2016
-    if timeout 2 bash -c 'echo >/dev/tcp/$1/$2' _ "$host" "$port" 2>/dev/null; then
-      return 0
-    fi
-    local elapsed=$((SECONDS - start))
-    if ((elapsed - last_report >= 30)); then
-      [[ -n "$label" ]] && msg_info "Still waiting for ${label} on ${host}:${port} (${elapsed}s elapsed)"
-      last_report=$elapsed
-    fi
-    sleep "$sleep_sec"
-  done
-  return 1
-}
-
-wait_ssh() {
-  local host="$1" port="${2:-22}" timeout="${3:-$SSH_TIMEOUT}"
-  msg_info "Waiting for SSH on $host:$port"
-  if wait_port "$host" "$port" "$timeout" "$SSH_POLL_INTERVAL" "SSH"; then
-    msg_ok "SSH is available on $host"
-  else
-    msg_error "SSH connection timed out after ${timeout}s — verify the VM has network access and SSH is running"
-  fi
-}
-
 get_vm_ip() {
-  # Wait for the qemu-guest-agent installed by the cloud-init snippet.
-  # Once cloud-init finishes (~3-5 min on first boot), the agent reports IPs directly.
+  # Wait for the qemu-guest-agent installed by virt-customize.
+  # Once the VM boots, the agent reports IPs directly.
   local ip="" elapsed=0 max_wait=300
 
   if [[ -n "${VM_IP:-}" ]]; then
@@ -743,7 +895,7 @@ get_vm_ip() {
     return 0
   fi
 
-  msg_info "Waiting for VM guest agent (cloud-init installs it on first boot, ~3-5 min)"
+  msg_info "Waiting for VM guest agent (~1-3 min on first boot)"
 
   while [[ $elapsed -lt $max_wait ]]; do
     ip=$(qm guest cmd "$VM_ID" network-get-interfaces 2>/dev/null | python3 -c "
@@ -789,386 +941,6 @@ except Exception:
 }
 
 #===============================================================================
-# Section 11: NUT Install & NUT Admin Deploy
-#===============================================================================
-
-build_nut_install_script() {
-  local nut_conf_b64 ups_conf_b64 upsd_conf_b64 upsd_users_b64 upsmon_conf_b64
-
-  nut_conf_b64=$(printf '%s\n' 'MODE=netserver' | base64 -w0)
-  ups_conf_b64=$(printf '[%s]\n  driver = %s\n  port = auto\n  desc = "%s"\n  pollinterval = 2\n' "$NUT_UPS_NAME" "$NUT_DRIVER" "$NUT_UPS_DESC" | base64 -w0)
-  upsd_conf_b64=$(printf 'LISTEN %s %s\nMAXAGE 15\nSTATEPATH /var/run/nut\n' "$NUT_LISTEN_ADDR" "$NUT_LISTEN_PORT" | base64 -w0)
-  upsd_users_b64=$(printf '[%s]\n  password = %s\n  actions = SET\n  instcmds = ALL\n\n[%s]\n  password = %s\n  upsmon master\n' "$NUT_ADMIN_USER" "$NUT_ADMIN_PASS" "$NUT_MONITOR_USER" "$NUT_MONITOR_PASS" | base64 -w0)
-  upsmon_conf_b64=$(
-    printf '%s\n' \
-      "MONITOR ${NUT_UPS_NAME}@localhost:${NUT_LISTEN_PORT} 1 ${NUT_MONITOR_USER} ${NUT_MONITOR_PASS} master" \
-      "" \
-      "MINSUPPLIES 1" \
-      'SHUTDOWNCMD "/sbin/shutdown -h +0"' \
-      "POLLFREQ 5" \
-      "POLLFREQALERT 5" \
-      "HOSTSYNC 15" \
-      "DEADTIME 15" \
-      "POWERDOWNFLAG /etc/killpower" \
-      "" \
-      'NOTIFYMSG ONLINE    "UPS %s on line power"' \
-      'NOTIFYMSG ONBATT    "UPS %s on battery"' \
-      'NOTIFYMSG LOWBATT   "UPS %s battery is low"' \
-      'NOTIFYMSG COMMOK    "Communications with UPS %s established"' \
-      'NOTIFYMSG COMMBAD   "Communications with UPS %s lost"' \
-      'NOTIFYMSG SHUTDOWN  "UPS %s forcing system shutdown"' \
-      "" \
-      "NOTIFYFLAG ONLINE   SYSLOG+WALL" \
-      "NOTIFYFLAG ONBATT   SYSLOG+WALL" \
-      "NOTIFYFLAG LOWBATT  SYSLOG+WALL" \
-      "RBWARNTIME 43200" \
-      "NOCOMMWARNTIME 300" \
-      "FINALDELAY 5" |
-      base64 -w0
-  )
-
-  NUT_INSTALL_SCRIPT=$(
-    cat <<'NUT_SCRIPT'
-#!/usr/bin/env bash
-set -e
-
-UPS_NAME="__UPS_NAME__"
-UPS_DESC="__UPS_DESC__"
-DRIVER="__DRIVER__"
-ADMIN_USER="__ADMIN_USER__"
-MONITOR_USER="__MONITOR_USER__"
-LISTEN_ADDR="__LISTEN_ADDR__"
-LISTEN_PORT="__LISTEN_PORT__"
-
-echo "[NUT-INSTALL] Waiting for cloud-init to finish..."
-cloud-init status --wait >/dev/null 2>&1 || true
-
-echo "[NUT-INSTALL] Waiting for apt lock..."
-APT_LOCK_MAX=30
-APT_LOCK_WAIT=0
-while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-  if [[ $APT_LOCK_WAIT -ge $APT_LOCK_MAX ]]; then
-    echo "[NUT-INSTALL-ERROR] apt lock is still held after $((APT_LOCK_MAX * 2)) seconds, aborting."
-    exit 1
-  fi
-  sleep 2
-  ((APT_LOCK_WAIT++))
-done
-
-echo "[NUT-INSTALL] Updating packages..."
-apt-get update -qq >/dev/null 2>&1
-
-echo "[NUT-INSTALL] Installing NUT packages..."
-apt-get install -y -qq nut-server nut-client usbutils libusb-1.0-0 libsnmp40 libneon27-gnutls libavahi-client3 libfreeipmi17 libupsclient6 >/dev/null 2>&1
-
-echo "[NUT-INSTALL] Creating library symlinks for nut-scanner..."
-ln -sf /usr/lib/x86_64-linux-gnu/libusb-1.0.so.0 /usr/lib/x86_64-linux-gnu/libusb-1.0.so 2>/dev/null || true
-ln -sf /usr/lib/x86_64-linux-gnu/libnetsnmp.so.40 /usr/lib/x86_64-linux-gnu/libnetsnmp.so 2>/dev/null || true
-ln -sf /usr/lib/x86_64-linux-gnu/libneon-gnutls.so.27 /usr/lib/x86_64-linux-gnu/libneon.so 2>/dev/null || true
-ln -sf /usr/lib/x86_64-linux-gnu/libavahi-client.so.3 /usr/lib/x86_64-linux-gnu/libavahi-client.so 2>/dev/null || true
-ln -sf /usr/lib/x86_64-linux-gnu/libfreeipmi.so.17 /usr/lib/x86_64-linux-gnu/libfreeipmi.so 2>/dev/null || true
-ln -sf /usr/lib/x86_64-linux-gnu/libupsclient.so.6 /usr/lib/x86_64-linux-gnu/libupsclient.so 2>/dev/null || true
-
-echo "[NUT-INSTALL] Waiting for UPS device..."
-for i in {1..12}; do
-    if lsusb 2>/dev/null | grep -qiE "(apc|cyberpower|eaton|tripplite|liebert|ups)"; then
-        echo "[NUT-INSTALL] UPS device detected"
-        break
-    fi
-    if [[ $i -eq 12 ]]; then
-        echo "[NUT-INSTALL-WARN] UPS device not detected after 60 seconds"
-    fi
-    sleep 5
-done
-
-echo "[NUT-INSTALL] Configuring NUT..."
-
-echo '__NUT_CONF_B64__' | base64 -d > /etc/nut/nut.conf
-
-echo "[NUT-INSTALL] Detecting UPS driver with nut-scanner..."
-NUT_SCANNER_OUTPUT=$(nut-scanner -U 2>/dev/null || true)
-
-if [[ -n "$NUT_SCANNER_OUTPUT" ]] && echo "$NUT_SCANNER_OUTPUT" | grep -q "driver"; then
-    echo "[NUT-INSTALL] UPS auto-detected by nut-scanner"
-    DETECTED_DRIVER=$(echo "$NUT_SCANNER_OUTPUT" | awk -F'"' '/driver[[:space:]]*=/ {print $2; exit}')
-    DETECTED_PORT=$(echo "$NUT_SCANNER_OUTPUT" | awk -F'"' '/^[[:space:]]+port[[:space:]]*=/ {print $2; exit}')
-    DETECTED_VENDORID=$(echo "$NUT_SCANNER_OUTPUT" | awk -F'"' '/vendorid[[:space:]]*=/ {print $2; exit}')
-    DETECTED_PRODUCTID=$(echo "$NUT_SCANNER_OUTPUT" | awk -F'"' '/productid[[:space:]]*=/ {print $2; exit}')
-
-    {
-        printf '[%s]\n' "$UPS_NAME"
-        printf '  driver = %s\n' "${DETECTED_DRIVER:-$DRIVER}"
-        printf '  port = %s\n' "${DETECTED_PORT:-auto}"
-        [[ -n "$DETECTED_VENDORID" ]] && printf '  vendorid = %s\n' "$DETECTED_VENDORID"
-        [[ -n "$DETECTED_PRODUCTID" ]] && printf '  productid = %s\n' "$DETECTED_PRODUCTID"
-        printf '  desc = "%s"\n' "$UPS_DESC"
-        printf '  pollinterval = 2\n'
-    } > /etc/nut/ups.conf
-else
-    echo "[NUT-INSTALL] nut-scanner did not detect UPS, using fallback driver: $DRIVER"
-    echo '__UPS_CONF_B64__' | base64 -d > /etc/nut/ups.conf
-fi
-
-echo '__UPSD_CONF_B64__' | base64 -d > /etc/nut/upsd.conf
-echo '__UPSD_USERS_B64__' | base64 -d > /etc/nut/upsd.users
-echo '__UPSMON_CONF_B64__' | base64 -d > /etc/nut/upsmon.conf
-
-echo "[NUT-INSTALL] Setting permissions..."
-chown root:nut /etc/nut/*.conf
-chmod 640 /etc/nut/*.conf
-
-mkdir -p /var/run/nut
-chown nut:nut /var/run/nut
-
-echo "[NUT-INSTALL] Starting NUT services..."
-set +e
-
-if systemctl list-unit-files 'nut-driver-enumerator.service' 2>/dev/null | grep -q 'nut-driver-enumerator'; then
-  systemctl daemon-reload
-  ERR=$(systemctl enable nut-server nut-monitor nut-driver-enumerator.service nut-driver-enumerator.path nut-driver-target 2>&1) || echo "[NUT-INSTALL-WARN] Failed to enable NUT services: ${ERR}"
-  ERR=$(systemctl restart nut-driver-enumerator.service 2>&1) || echo "[NUT-INSTALL-WARN] nut-driver-enumerator restart failed: ${ERR}"
-elif systemctl list-unit-files 'nut-driver@.service' 2>/dev/null | grep -q 'nut-driver@'; then
-  systemctl daemon-reload
-  ERR=$(systemctl enable "nut-driver@${UPS_NAME}" nut-server nut-monitor 2>&1) || echo "[NUT-INSTALL-WARN] Failed to enable NUT services: ${ERR}"
-  ERR=$(systemctl restart "nut-driver@${UPS_NAME}" 2>&1) || echo "[NUT-INSTALL-WARN] nut-driver@${UPS_NAME} restart failed: ${ERR}"
-else
-  ERR=$(systemctl enable nut-driver nut-server nut-monitor 2>&1) || echo "[NUT-INSTALL-WARN] Failed to enable NUT services: ${ERR}"
-  ERR=$(systemctl restart nut-driver 2>&1) || echo "[NUT-INSTALL-WARN] nut-driver restart failed: ${ERR}"
-fi
-
-sleep 3
-ERR=$(systemctl restart nut-server nut-monitor 2>&1) || echo "[NUT-INSTALL-WARN] nut-server/nut-monitor restart failed: ${ERR}"
-set -e
-
-echo "[NUT-INSTALL] Complete!"
-NUT_SCRIPT
-  )
-
-  NUT_INSTALL_SCRIPT=$(
-    export PY_NUT_UPS_NAME="$NUT_UPS_NAME"
-    export PY_NUT_UPS_DESC="$NUT_UPS_DESC"
-    export PY_NUT_DRIVER="$NUT_DRIVER"
-    export PY_NUT_ADMIN_USER="$NUT_ADMIN_USER"
-    export PY_NUT_MONITOR_USER="$NUT_MONITOR_USER"
-    export PY_NUT_LISTEN_ADDR="$NUT_LISTEN_ADDR"
-    export PY_NUT_LISTEN_PORT="$NUT_LISTEN_PORT"
-    export PY_NUT_CONF_B64="$nut_conf_b64"
-    export PY_UPS_CONF_B64="$ups_conf_b64"
-    export PY_UPSD_CONF_B64="$upsd_conf_b64"
-    export PY_UPSD_USERS_B64="$upsd_users_b64"
-    export PY_UPSMON_CONF_B64="$upsmon_conf_b64"
-    python3 -c "
-import os, sys
-script = sys.stdin.read()
-script = script.replace('__UPS_NAME__', os.environ['PY_NUT_UPS_NAME'])
-script = script.replace('__UPS_DESC__', os.environ['PY_NUT_UPS_DESC'])
-script = script.replace('__DRIVER__', os.environ['PY_NUT_DRIVER'])
-script = script.replace('__ADMIN_USER__', os.environ['PY_NUT_ADMIN_USER'])
-script = script.replace('__MONITOR_USER__', os.environ['PY_NUT_MONITOR_USER'])
-script = script.replace('__LISTEN_ADDR__', os.environ['PY_NUT_LISTEN_ADDR'])
-script = script.replace('__LISTEN_PORT__', os.environ['PY_NUT_LISTEN_PORT'])
-script = script.replace('__NUT_CONF_B64__', os.environ['PY_NUT_CONF_B64'])
-script = script.replace('__UPS_CONF_B64__', os.environ['PY_UPS_CONF_B64'])
-script = script.replace('__UPSD_CONF_B64__', os.environ['PY_UPSD_CONF_B64'])
-script = script.replace('__UPSD_USERS_B64__', os.environ['PY_UPSD_USERS_B64'])
-script = script.replace('__UPSMON_CONF_B64__', os.environ['PY_UPSMON_CONF_B64'])
-print(script, end='')
-" <<<"$NUT_INSTALL_SCRIPT"
-  )
-}
-
-build_nut_admin_script() {
-  local tarball_url
-  tarball_url="${NUT_ADMIN_URL_PREFIX:-${NUT_ADMIN_RELEASES_URL}}/nut-admin.tar.gz"
-
-  NUT_ADMIN_SCRIPT=$(
-    cat <<'NUT_ADMIN_HEREDOC'
-#!/usr/bin/env bash
-NUT_ADMIN_TARBALL_URL="__NUT_ADMIN_TARBALL_URL__"
-NUT_ADMIN_FAIL=0
-NUT_ADMIN_ERROR_LOG=""
-
-echo "[NUT-ADMIN] Installing NUT Admin web interface..."
-
-echo "[NUT-ADMIN] Installing dependencies..."
-if ! apt-get update -qq >/dev/null 2>&1; then
-  NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] apt-get update failed\n"
-  NUT_ADMIN_FAIL=1
-fi
-
-if [[ $NUT_ADMIN_FAIL -eq 0 ]] && ! apt-get install -y -qq python3-venv python3-pip curl >/dev/null 2>&1; then
-  NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] apt-get install failed\n"
-  NUT_ADMIN_FAIL=1
-fi
-
-if [[ $NUT_ADMIN_FAIL -eq 0 ]]; then
-  echo "[NUT-ADMIN] Creating application directory..."
-  mkdir -p /opt/nut-admin
-
-  echo "[NUT-ADMIN] Downloading tarball..."
-  if curl -fsSL "${NUT_ADMIN_TARBALL_URL}" -o /tmp/nut-admin.tar.gz; then
-    tar -xzf /tmp/nut-admin.tar.gz -C /opt/nut-admin/
-    rm -f /tmp/nut-admin.tar.gz
-  else
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] Failed to download nut-admin tarball\n"
-    NUT_ADMIN_FAIL=1
-  fi
-fi
-
-if [[ $NUT_ADMIN_FAIL -eq 0 ]]; then
-  echo "[NUT-ADMIN] Setting up Python virtual environment..."
-  if ! python3 -m venv /opt/nut-admin/venv >/dev/null 2>&1; then
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] python3 -m venv failed\n"
-    NUT_ADMIN_FAIL=1
-  elif ! /opt/nut-admin/venv/bin/pip install --quiet -r /opt/nut-admin/requirements.txt >/dev/null 2>&1; then
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] pip install requirements failed\n"
-    NUT_ADMIN_FAIL=1
-  fi
-fi
-
-if [[ $NUT_ADMIN_FAIL -eq 0 ]]; then
-  echo "[NUT-ADMIN] Installing systemd service..."
-  if [[ -f /opt/nut-admin/nut-admin.service ]]; then
-    cp /opt/nut-admin/nut-admin.service /etc/systemd/system/nut-admin.service
-  else
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] nut-admin.service not found in tarball\n"
-    NUT_ADMIN_FAIL=1
-  fi
-fi
-
-if [[ $NUT_ADMIN_FAIL -eq 0 ]]; then
-  echo "[NUT-ADMIN] Enabling systemd service..."
-  if ! systemctl daemon-reload; then
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] systemctl daemon-reload failed\n"
-    NUT_ADMIN_FAIL=1
-  fi
-fi
-
-if [[ $NUT_ADMIN_FAIL -eq 0 ]]; then
-  if ! systemctl enable nut-admin; then
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] systemctl enable nut-admin failed\n"
-    NUT_ADMIN_FAIL=1
-  fi
-fi
-
-if [[ $NUT_ADMIN_FAIL -eq 0 ]]; then
-  echo "[NUT-ADMIN] Starting service..."
-  if systemctl restart nut-admin; then
-    VM_IP="$(hostname -I | awk '{print $1}')"
-    echo ""
-    echo "NUT Admin web interface installed and running."
-    echo "URL: http://${VM_IP}:8081"
-    echo "NUT_ADMIN_OK"
-  else
-    NUT_ADMIN_ERROR_LOG+="[NUT-ADMIN-ERROR] systemctl restart nut-admin failed\n"
-    NUT_ADMIN_FAIL=1
-  fi
-fi
-
-if [[ $NUT_ADMIN_FAIL -ne 0 ]]; then
-  echo "NUT_ADMIN_FAIL"
-  echo "NUT_ADMIN_ERROR_LOG_START"
-  echo -e "$NUT_ADMIN_ERROR_LOG"
-  echo "NUT_ADMIN_ERROR_LOG_END"
-fi
-NUT_ADMIN_HEREDOC
-  )
-
-  NUT_ADMIN_SCRIPT=$(
-    export PY_NUT_ADMIN_TARBALL_URL="$tarball_url"
-    python3 -c "
-import os, sys
-script = sys.stdin.read()
-script = script.replace('__NUT_ADMIN_TARBALL_URL__', os.environ['PY_NUT_ADMIN_TARBALL_URL'])
-print(script, end='')
-" <<<"$NUT_ADMIN_SCRIPT"
-  )
-}
-
-_deploy_and_run() {
-  local script_content="$1" remote_path="$2" desc="$3" retry_sleep="${4:-10}"
-  local tmp_script retry_count=0 max_retries=5
-  tmp_script=$(mktemp "${TEMP_KEY_DIR}/${desc// /-}-XXXXXX.sh")
-  chmod 600 "$tmp_script"
-  printf '%s\n' "$script_content" >"$tmp_script"
-
-  while [[ $retry_count -lt $max_retries ]]; do
-    if scp -q "${SSH_OPTS[@]}" -o ConnectTimeout=10 -i "$TEMP_SSH_KEY" \
-      "$tmp_script" "${VM_USER}@${VM_IP}:$remote_path" 2>/dev/null; then
-      break
-    fi
-    sleep "$retry_sleep"
-    ((retry_count++))
-  done
-  rm -f "$tmp_script"
-  [[ $retry_count -eq $max_retries ]] && msg_error "Failed to copy ${desc} script to VM"
-
-  ssh "${SSH_OPTS[@]}" -o ConnectTimeout=10 -i "$TEMP_SSH_KEY" \
-    "${VM_USER}@${VM_IP}" "chmod +x $remote_path" 2>/dev/null || true
-
-  msg_ok "${desc} script deployed"
-  msg_info "Running ${desc} installer on VM (this may take a few minutes)"
-
-  local rc=0
-  ssh "${SSH_OPTS[@]}" -o ConnectTimeout=10 -o ServerAliveInterval=30 -i "$TEMP_SSH_KEY" \
-    "${VM_USER}@${VM_IP}" "sudo bash $remote_path" 2>&1 || rc=$?
-
-  ssh "${SSH_OPTS[@]}" -o ConnectTimeout=10 -i "$TEMP_SSH_KEY" "${VM_USER}@${VM_IP}" \
-    "rm -f $remote_path" 2>/dev/null || true
-
-  return $rc
-}
-
-run_nut_install() {
-  build_nut_install_script
-  msg_info "Deploying NUT install script to VM"
-  sleep 20
-  local output rc=0
-  output=$(_deploy_and_run "$NUT_INSTALL_SCRIPT" "/tmp/nut-install.sh" "NUT" 10) || rc=$?
-  while IFS= read -r line; do
-    [[ "$line" =~ \[NUT-INSTALL-(WARN|ERROR)\] ]] && SCRIPT_ERROR_LOG+=("$line")
-  done <<<"$output" || true
-  [[ $rc -ne 0 ]] && msg_error "NUT install failed (ssh rc=$rc)"
-  msg_ok "NUT install script completed"
-}
-
-run_nut_admin_install() {
-  build_nut_admin_script
-  local output
-  output=$(_deploy_and_run "$NUT_ADMIN_SCRIPT" "/tmp/nut-admin-install.sh" "NUT Admin" 5) || true
-  if echo "$output" | grep -q "NUT_ADMIN_OK"; then
-    msg_ok "NUT Admin web interface installed"
-  elif echo "$output" | grep -q "NUT_ADMIN_FAIL"; then
-    msg_warn "NUT Admin web interface failed"
-  else
-    msg_warn "NUT Admin web interface status unknown"
-  fi
-  while IFS= read -r line; do
-    [[ "$line" =~ \[NUT-ADMIN-(WARN|ERROR)\] ]] && SCRIPT_ERROR_LOG+=("$line")
-  done <<<"$output" || true
-}
-
-verify_nut_post_reboot() {
-  local retries=0 max_retries=18
-  msg_info "Verifying NUT server after reboot"
-  while ((retries < max_retries)); do
-    local output
-    output=$(ssh "${SSH_OPTS[@]}" -o ConnectTimeout=5 -i "$TEMP_SSH_KEY" \
-      "${VM_USER}@${VM_IP}" \
-      "upsc '${NUT_UPS_NAME}@localhost' 2>/dev/null || true" 2>/dev/null) || true
-    if [[ -n "$output" ]]; then
-      NUT_TEST_RESULT="OK"
-      msg_ok "NUT server responding after reboot"
-      return 0
-    fi
-    sleep 5
-    retries=$((retries + 1))
-  done
-  NUT_TEST_RESULT="FAIL"
-  msg_warn "NUT server not responding after reboot — check driver/USB passthrough"
-}
-
-#===============================================================================
 # Section 12: Final Summary Output
 #===============================================================================
 
@@ -1183,12 +955,9 @@ print_summary() {
   summary_text+="  Test command:\n"
   summary_text+="    upsc ${NUT_UPS_NAME}@${VM_IP}\n\n"
   summary_text+="  Client upsmon.conf:\n"
-  summary_text+="    MONITOR ${NUT_UPS_NAME}@${VM_IP}:${NUT_LISTEN_PORT} 1 ${NUT_MONITOR_USER} PASS slave"
-
-  if [[ "$NUT_TEST_RESULT" == "FAIL" ]]; then
-    summary_text+="\n\n⚠ NUT test failed — check driver selection\n"
-    summary_text+="  Try: upsc ${NUT_UPS_NAME}@${VM_IP}"
-  fi
+  summary_text+="    MONITOR ${NUT_UPS_NAME}@${VM_IP}:${NUT_LISTEN_PORT} 1 ${NUT_MONITOR_USER} PASS slave\n\n"
+  summary_text+="  Note: On first boot the nut-detect service scans the USB UPS\n"
+  summary_text+="        and auto-configures the correct driver."
 
   if [[ "$AUTO_GENERATE_PASSWORDS" == "true" && ${#GENERATED_PASSWORDS[@]} -gt 0 ]]; then
     summary_text+="\n\n⚠ AUTO-GENERATED PASSWORDS (save these!):\n"
@@ -1199,7 +968,7 @@ print_summary() {
 
   whiptail --backtitle "Proxmox VE Helper Scripts" \
     --title "SETUP COMPLETE" \
-    --msgbox "$summary_text" 24 72
+    --msgbox "$summary_text" 26 72
 
   echo
   echo -e "${GN}${CM}NUT VM setup completed successfully!${CL}"
@@ -1235,6 +1004,7 @@ main() {
     echo "Usage: $0 [--debug|--version|--help]"
     echo
     echo "Creates an Ubuntu 24.04 VM on Proxmox and configures NUT netserver."
+    echo "Uses virt-customize for offline disk image setup (no SSH)."
     echo
     echo "Options:"
     echo "  --help, -h      Show this help message"
@@ -1270,9 +1040,8 @@ main() {
   check_root
   check_proxmox
   check_dependencies
+  check_virt_customize
   check_architecture
-
-  inject_ssh_key
 
   prompt_autogenerate_passwords
   collect_vm_config
@@ -1283,31 +1052,21 @@ main() {
   fi
 
   download_cloud_image
+  virt_customize_image
   create_vm
   detect_ups
   setup_usb_passthrough
   start_vm
 
   get_vm_ip
-  wait_ssh "$VM_IP" 22
-  run_nut_install
-  run_nut_admin_install
-
-  msg_info "Rebooting VM ${VM_ID} to apply NUT configuration"
-  qm reboot "$VM_ID" 2>/dev/null || qm reset "$VM_ID" 2>/dev/null || true
-  msg_ok "VM rebooted"
-
-  msg_info "Waiting for VM to finish rebooting"
-  if wait_port "$VM_IP" 22 90 5 "VM"; then
-    msg_ok "VM is reachable after reboot"
-    verify_nut_post_reboot
-  else
-    msg_warn "VM is still rebooting — upsc command may not be immediately available"
-  fi
 
   print_summary
 }
 
-trap '[[ -n "${SPINNER_PID:-}" ]] && kill "${SPINNER_PID:-}" 2>/dev/null; printf "\e[?25h"; echo -e "\n${RD}Interrupted${CL}"; exit 130' INT TERM
+cleanup_work_file() {
+  [[ -n "${WORK_FILE:-}" ]] && rm -f "$WORK_FILE"
+}
+
+trap '[[ -n "${SPINNER_PID:-}" ]] && kill "${SPINNER_PID:-}" 2>/dev/null; printf "\e[?25h"; cleanup_work_file; echo -e "\n${RD}Interrupted${CL}"; exit 130' INT TERM
 
 main "$@"

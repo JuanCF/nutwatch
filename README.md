@@ -11,7 +11,7 @@ A bash script to automatically create an Ubuntu 24.04 VM on Proxmox VE, configur
 - 🖥️ **Automated VM Creation** - Creates Ubuntu 24.04 VM with optimized settings
 - 🔌 **USB UPS Detection** - Auto-detects and configures USB passthrough for supported UPS devices
 - ⚡ **NUT Server Setup** - Installs and configures NUT in netserver mode
-- 🔒 **Secure by Default** - Creates temporary SSH keys, sets proper NUT permissions
+- 🔒 **Secure by Default** - Uses offline disk modification, sets proper NUT permissions
 - 🎯 **Interactive Configuration** - Guided prompts for all settings with sensible defaults
 - 📊 **Status Summary** - Provides test commands and client configuration snippets
 - 🛡️ **Error Handling** - Validates inputs, handles edge cases (duplicate UPS models, slow DHCP, etc.)
@@ -35,7 +35,7 @@ Other USB UPS devices can be configured manually.
 - Proxmox VE 7.x or 8.x
 - Root access on Proxmox host
 - Internet connectivity (downloads Ubuntu cloud image)
-- `wget`, `ssh`, `scp`, `lsusb` installed (usually present by default)
+- `wget`, `curl`, `lsusb` installed (usually present by default)
 - A USB UPS connected to the Proxmox host (optional; can be configured manually or skipped)
 
 ## Installation
@@ -118,9 +118,9 @@ The nut-admin web UI is deployed inside the VM as a pre-built tarball.
 
 ### How it works
 
-1. `vm/nut-vm.sh` embeds `src/nut-admin/install.sh` as a heredoc, SCPs it to the VM, and executes it.
-2. Inside the VM, `install.sh` downloads `nut-admin.tar.gz` from GitHub Releases (or a custom URL) and unpacks it to `/opt/nut-admin/`.
-3. A Python virtual environment is created, dependencies installed, and the systemd service started on port 8081.
+1. `vm/nut-vm.sh` downloads the Ubuntu cloud image and modifies it offline with `virt-customize`.
+2. During offline modification, NUT configs are written directly to the disk image and the nut-admin tarball is downloaded, unpacked to `/opt/nut-admin/`, and its systemd service is enabled.
+3. The customized disk is imported into a new Proxmox VM. On first boot, a `nut-detect` oneshot service scans the USB UPS and auto-configures the correct driver.
 
 ### Creating a release
 
@@ -215,8 +215,9 @@ upsc ups@<VM_IP>
 # Test from another machine
 upsc ups@<VM_IP>:3493
 
-# Check NUT services inside VM
-ssh ubuntu@<VM_IP> systemctl status nut-server nut-monitor
+# Check NUT services inside VM (via Proxmox console)
+qm terminal <vmid>
+systemctl status nut-server nut-monitor
 ```
 
 ## Configuring NUT Clients
@@ -250,7 +251,7 @@ systemctl restart nut-client
 ### NUT Test Fails
 
 - Check UPS driver compatibility: https://networkupstools.org/stable-hcl.html
-- SSH to VM and check logs: `journalctl -u nut-server`
+- Check logs via Proxmox console: `qm terminal <vmid>` then `journalctl -u nut-server`
 - Verify UPS is visible in VM: `lsusb`
 
 ### VM IP Not Detected
@@ -265,10 +266,10 @@ The script automatically sets `chmod 640` and `chown root:nut` on all NUT config
 
 ## Security Notes
 
-- Temporary SSH keys are generated in `/tmp/` and auto-deleted on exit
 - NUT passwords should be strong and unique
 - The netserver listens on all interfaces by default (`0.0.0.0`)
 - Consider firewall rules to restrict NUT port (3493) access
+- Cloud-init vendor snippet is written to `/var/lib/vz/snippets/` (mode 600) — remove after first boot if desired
 
 ## Architecture
 
@@ -279,11 +280,12 @@ Proxmox Host
 │                         ▼
 ├── vm/nut-vm.sh   VM (Ubuntu 24.04 minimal)
 │   ├── Downloads        │   ├── NUT Server
-│   ├── Creates VM ────► │   │   ├── nut-driver (usbhid-ups)
-│   ├── Detects UPS      │   │   ├── upsd (port 3493)
-│   ├── Configures  ─────┘   │   ├── upsmon
-│   └── Deploys via          │   └── nut-admin (port 8081)
-       embedded script       └── SSH (temp keys)
+│   ├── virt-customize ─►│   │   ├── nut-driver (usbhid-ups)
+│   ├── Creates VM       │   │   ├── upsd (port 3493)
+│   ├── Detects UPS      │   │   ├── upsmon
+│   └── Configures       │   └── nut-admin (port 8081)
+       (offline disk          └── cloud-init (network, resize)
+        modification)
 ```
 
 ## License

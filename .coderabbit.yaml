@@ -41,10 +41,10 @@ reviews:
       and `.shellcheckrc` sets `external-sources=true`
 
     ## Domain-specific patterns to validate
-    - **Password handling**: NUT passwords are base64-encoded then embedded in
-      a heredoc and substituted via Python `str.replace`. Never suggest
-      switching to shell variable expansion for passwords — special chars
-      ($, `, \) will break. The base64+Python approach is correct.
+    - **Password handling**: NUT passwords are written directly into config
+      files via `--upload` inside `virt-customize`. Do not suggest inlining
+      passwords into `--run-command` strings where shell expansion could
+      mangle special characters.
     - **Atomic config writes**: `write_file()` in app.py uses `tempfile.mkstemp`
       + `os.replace`. Do not suggest simpler `open(..., 'w')` patterns.
     - **IDENTIFIER_REGEX**: NUT section names and usernames are validated with
@@ -66,28 +66,31 @@ reviews:
     - **NUT driver service name**: Probes `nut-driver-enumerator`, then
       `nut-driver@`, then `nut-driver` — handles across Ubuntu releases.
       Do not simplify to a single service name.
-    - **Temporary SSH keys**: Generated in `/tmp/nut-setup-$$/` and cleaned up
-      via `trap EXIT`. Flag if cleanup is incomplete.
+    - **virt-customize cleanup**: The working disk image (`/tmp/nut-vm-${VM_ID}-work.img`)
+      must be removed on success, failure, or interrupt. Flag if `rm -f` is missing
+      from any error path or `trap` cleanup.
 
   # ---------------------------------------------------------------------------
   # path_instructions: folder-specific review rules
   # ---------------------------------------------------------------------------
   path_instructions:
     # Shell script run as root on Proxmox hosts. Security-critical:
-    # handles passwords, SSH keys, qm commands, cloud-init injection.
+    # handles passwords, qm commands, cloud-init injection, virt-customize.
     - path: vm/**.sh
       instructions: |
         - This script runs as root on Proxmox. Flag any unquoted variable
-          in a command that reaches the system (qm, ssh, scp, pip).
+          in a command that reaches the system (qm, virt-customize, curl).
           shellcheck may miss these in eval-like contexts.
         - Never suggest replacing the local `msg_error` with the one from
           build.func — they have different exit behavior.
-        - Passwords in NUT configs are substituted via Python `str.replace`
-          from env vars, NOT shell variable expansion. This is correct for
-          handling special characters. Do not suggest `sed` or `envsubst`.
+        - NUT config files are written via `--upload` in `virt-customize`,
+          not via heredoc or shell expansion. Passwords must never appear
+          in `--run-command` arguments where shell expansion could mangle
+          special characters.
         - Verify that any new whiptail prompt has `|| msg_error "Cancelled
           by user"` — users pressing Cancel must abort, not continue.
-        - Verify `trap EXIT` cleanup covers any new temp files or keys.
+        - Verify `trap EXIT` cleanup removes the working disk image
+          (`/tmp/nut-vm-${VM_ID}-work.img`) on interrupt or failure.
         - Flag new `curl | sh` patterns — the script only sources
           `build.func` and `cloud-init.func` from the community-scripts
           org; new external fetches need a checksum or pinned commit.
