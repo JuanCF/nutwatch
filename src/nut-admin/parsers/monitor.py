@@ -75,9 +75,12 @@ def set_minsupplies(content: str, value: int = 0) -> str:
     if content is None:
         content = ""
     lines = content.splitlines()
+    replaced = False
+    minsupplies_re = re.compile(r"^\s*MINSUPPLIES\s+\d+", re.IGNORECASE)
     for i, line in enumerate(lines):
-        if re.match(r"^\s*MINSUPPLIES\s+\d+", line, re.IGNORECASE):
+        if minsupplies_re.match(line):
             lines[i] = f"MINSUPPLIES {value}"
-            return "\n".join(lines)
-    lines.append(f"MINSUPPLIES {value}")
+            replaced = True
+    if not replaced:
+        lines.append(f"MINSUPPLIES {value}")
     return "\n".join(lines)

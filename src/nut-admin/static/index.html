@@ -449,7 +449,7 @@ function showRestartDriverModal(name) {
     '<p>Restart services and driver to apply changes immediately?</p>' +
     '<div class="modal-actions">' +
       '<button class="secondary" onclick="closeModal()">Close</button>' +
-      '<button class="primary" onclick="restartAllThenDriver(\'' + esc(name) + '\')">Restart Driver</button>' +
+      '<button class="primary" onclick="restartAllThenDriver(' + JSON.stringify(name).replace(/"/g, '&quot;') + ')">Restart Driver</button>' +
     '</div>';
   $('modal-overlay').classList.add('open');
 }
@@ -474,10 +474,13 @@ async function restartAllThenDriver(name) {
     msg += 'Driver restart failed:\n' + e.message;
   }
   closeModal();
-  await showAlert(msg, 'Restart Result');
-  loadUps();
-  loadServiceStatus();
-  _restartPending = false;
+  try {
+    await showAlert(msg, 'Restart Result');
+    loadUps();
+    loadServiceStatus();
+  } finally {
+    _restartPending = false;
+  }
 }
 
 async function scanUps() {

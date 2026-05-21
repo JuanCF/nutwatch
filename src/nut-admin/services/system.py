@@ -35,8 +35,10 @@ def detailed_service_status():
 def driver_action(ups_name: str, action: str):
     if action == "restart":
         rc1, out1, err1 = run_cmd(["upsdrvctl", "stop", ups_name], timeout=30)
+        if rc1 != 0:
+            return rc1, out1, err1
         rc2, out2, err2 = run_cmd(["upsdrvctl", "start", ups_name], timeout=30)
-        return rc1 or rc2, out1 + out2, err1 + err2
+        return rc2, out1 + out2, err1 + err2
     return run_cmd(["upsdrvctl", action, ups_name], timeout=30)
 
 
