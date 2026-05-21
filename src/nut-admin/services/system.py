@@ -22,7 +22,23 @@ def service_status():
     return run_cmd(["systemctl", "status", "nut-server", "nut-monitor"])
 
 
+def detailed_service_status():
+    services = ["nut-driver", "nut-server", "nut-monitor"]
+    result = {}
+    for svc in services:
+        rc, out, err = run_cmd(["systemctl", "is-active", svc], timeout=5)
+        state = (out or err).strip()
+        result[svc] = {"active": rc == 0, "state": state}
+    return result
+
+
 def driver_action(ups_name: str, action: str):
+    if action == "restart":
+        rc1, out1, err1 = run_cmd(["upsdrvctl", "stop", ups_name], timeout=30)
+        if rc1 != 0:
+            return rc1, out1, err1
+        rc2, out2, err2 = run_cmd(["upsdrvctl", "start", ups_name], timeout=30)
+        return rc2, out1 + out2, err1 + err2
     return run_cmd(["upsdrvctl", action, ups_name], timeout=30)
 
 

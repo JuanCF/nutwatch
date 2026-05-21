@@ -4,6 +4,7 @@ from parsers import (
     parse_nut_scanner_output,
     parse_monitor_lines, remove_monitor_line, add_monitor_line,
     find_monitor_user,
+    ensure_minsupplies, set_minsupplies,
 )
 
 
@@ -171,3 +172,27 @@ def test_find_monitor_user_empty():
     assert name is None
     assert pwd is None
     assert role is None
+
+
+def test_ensure_minsupplies_adds_when_missing():
+    assert ensure_minsupplies("", 0) == "MINSUPPLIES 0"
+    assert ensure_minsupplies('SHUTDOWNCMD "test"', 0) == 'SHUTDOWNCMD "test"\nMINSUPPLIES 0'
+
+
+def test_ensure_minsupplies_preserves_existing():
+    assert ensure_minsupplies("MINSUPPLIES 1", 0) == "MINSUPPLIES 1"
+
+
+def test_set_minsupplies_overrides():
+    assert set_minsupplies("MINSUPPLIES 1", 0) == "MINSUPPLIES 0"
+    assert set_minsupplies("", 2) == "MINSUPPLIES 2"
+
+
+def test_ensure_minsupplies_none_input():
+    assert ensure_minsupplies(None, 0) == "MINSUPPLIES 0"
+    assert ensure_minsupplies(None, 3) == "MINSUPPLIES 3"
+
+
+def test_set_minsupplies_none_input():
+    assert set_minsupplies(None, 0) == "MINSUPPLIES 0"
+    assert set_minsupplies(None, 2) == "MINSUPPLIES 2"

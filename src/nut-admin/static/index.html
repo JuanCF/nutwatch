@@ -124,6 +124,7 @@
 <div class="container">
   <div id="sec-ups" class="section active">
     <h2>UPS Devices</h2>
+    <div id="service-status" style="margin-bottom:1rem;"></div>
     <div class="toolbar">
       <button class="primary" onclick="openUpsModal()">Add UPS</button>
       <button class="secondary" onclick="scanUps()">Scan USB</button>
@@ -191,6 +192,12 @@ const MAX_LOG_LINES = 1000;
 
 let _dialogResolve = null;
 let _dialogTrigger = null;
+
+let _upsSavePending = false;
+let _userSavePending = false;
+const _deletePending = {};
+const _driverPending = {};
+let _restartPending = false;
 /**
  * Low-level dialog primitive. `html` MUST be pre-sanitised (all dynamic
  * values through esc()). Prefer showConfirm / showDangerConfirm / showAlert.
@@ -265,6 +272,24 @@ function badge(status) {
   return '<span class="badge ' + s + '">' + s + '</span>';
 }
 
+async function loadServiceStatus() {
+  const el = $('service-status');
+  if (!el) return;
+  try {
+    const r = await api('/service/status-detailed');
+    let html = '<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">';
+    html += '<span style="color:var(--muted);font-size:0.85rem;">Services:</span>';
+    for (const [svc, info] of Object.entries(r)) {
+      const cls = info.active ? 'online' : (info.state === 'failed' ? 'offline' : 'unknown');
+      html += '<span class="badge ' + cls + '">' + esc(svc) + ': ' + esc(info.state) + '</span>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<span class="badge unknown">status unavailable</span>';
+  }
+}
+
 async function loadUps() {
   const list = await api('/ups');
   const grid = $('ups-grid');
@@ -287,27 +312,63 @@ async function loadUps() {
 }
 
 async function driverAction(name, action) {
-  if (!await showConfirm(action + ' driver for ' + name + '?')) return;
-  const r = await api('/driver/' + encodeURIComponent(name) + '/' + action, {method:'POST'});
-  await showAlert('Driver ' + action + ': rc=' + r.returncode + '\n' + r.stdout + '\n' + r.stderr, 'Driver Result');
-  loadUps();
+  const key = name + '|' + action;
+  if (_driverPending[key]) return;
+  _driverPending[key] = true;
+  try {
+    if (!await showConfirm(action + ' driver for ' + name + '?')) return;
+    const r = await api('/driver/' + encodeURIComponent(name) + '/' + action, {method:'POST'});
+    const title = r.returncode === 0 ? 'Driver Result' : 'Driver Error';
+    await showAlert('Driver ' + action + ': rc=' + r.returncode + '\n' + (r.stdout || '') + '\n' + (r.stderr || ''), title);
+    loadUps();
+    loadServiceStatus();
+  } catch(e) {
+    await showAlert('Driver ' + action + ' failed:\n' + e.message, 'Error');
+  } finally {
+    delete _driverPending[key];
+  }
 }
 
 async function deleteUps(name) {
-  if (!await showDangerConfirm('Delete UPS "' + name + '"?')) return;
-  await api('/ups/' + encodeURIComponent(name), {method:'DELETE'});
+  const key = 'ups:' + name;
+  if (_deletePending[key]) return;
+  _deletePending[key] = true;
   try {
-    await api('/service/restart-all', {method:'POST'});
+    if (!await showDangerConfirm('Delete UPS "' + name + '"? This will stop the driver and remove all configuration.')) return;
+    await api('/ups/' + encodeURIComponent(name), {method:'DELETE'});
   } catch(e) {
-    console.error('restart-all failed:', e);
+    await showAlert('Failed to delete UPS:\n' + e.message, 'Error');
+    return;
+  } finally {
+    delete _deletePending[key];
+  }
+
+  // Restart services after successful deletion
+  try {
+    const list = await api('/ups');
+    const r = list.length === 0
+      ? await api('/service/restart-monitor', {method:'POST'})
+      : await api('/service/restart-all', {method:'POST'});
+    if (r.returncode !== 0) {
+      showAlert('Service restart warning:\n' + (r.stderr || r.stdout || ''), 'Restart Warning');
+    }
+  } catch(e) {
+    console.error('restart failed:', e);
     showAlert('Restart failed — changes may not be fully applied:\n' + e.message, 'Restart Error');
   }
   loadUps();
+  loadServiceStatus();
 }
 
 function openUpsModal(u) {
   u = u || {};
   const edit = !!u.name;
+  let defaultDirectives = '';
+  if (!edit) {
+    defaultDirectives = 'pollinterval=5';
+  } else {
+    defaultDirectives = (u.directives||[]).map(d=>d[0]+'='+d[1]).join('\n');
+  }
   $('modal').innerHTML =
     '<h3>' + (edit ? 'Edit' : 'Add') + ' UPS</h3>' +
     '<div class="field"><label>Name</label><input id="u-name" value="' + esc(u.name||'') + '"' + (edit?' readonly':'') + '></div>' +
@@ -315,40 +376,111 @@ function openUpsModal(u) {
     '<div class="field"><label>Port</label><input id="u-port" value="' + esc(u.port||'auto') + '"></div>' +
     '<div class="field"><label>Description</label><input id="u-desc" value="' + esc(u.desc||'') + '"></div>' +
     '<div class="field"><label>Extra directives (key=value per line)</label>' +
-      '<textarea id="u-directives" style="height:80px;font-family:var(--mono);background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;resize:vertical;">' + esc((u.directives||[]).map(d=>d[0]+'='+d[1]).join('\n')) + '</textarea></div>' +
+      '<textarea id="u-directives" oninput="upsCheckWarnings()" style="height:80px;font-family:var(--mono);background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;resize:vertical;">' + esc(defaultDirectives) + '</textarea>' +
+      '<div id="u-warning" style="color:var(--yellow);font-size:0.8rem;margin-top:0.25rem;display:none;">Warning: pollinterval lower than 5 may cause instability.</div></div>' +
     '<div class="modal-actions">' +
       '<button class="secondary" onclick="closeModal()">Cancel</button>' +
+      '<button class="secondary" onclick="applyRecommendedConfig()">Apply Recommended Config</button>' +
       '<button class="primary" onclick="saveUps(' + edit + ')">Save</button>' +
+    '</div>';
+  $('modal-overlay').classList.add('open');
+  upsCheckWarnings();
+}
+
+function upsCheckWarnings() {
+  const dirs = $('u-directives').value;
+  const m = dirs.match(/^\s*pollinterval\s*=\s*(\d+)/m);
+  const el = $('u-warning');
+  if (el) {
+    el.style.display = (m && parseInt(m[1],10) < 5) ? 'block' : 'none';
+  }
+}
+
+function applyRecommendedConfig() {
+  const map = {};
+  $('u-directives').value.split('\n').forEach(line => {
+    const idx = line.indexOf('=');
+    if (idx > 0) map[line.slice(0,idx).trim()] = line.slice(idx+1).trim();
+  });
+  if (!map.pollinterval) map.pollinterval = '5';
+  $('u-directives').value = Object.entries(map).map(e => e[0]+'='+e[1]).join('\n');
+  upsCheckWarnings();
+}
+
+async function saveUps(edit) {
+  if (_upsSavePending) return;
+  _upsSavePending = true;
+  try {
+    const name = $('u-name').value.trim();
+    const dirsText = $('u-directives').value;
+    const m = dirsText.match(/^\s*pollinterval\s*=\s*(\d+)/m);
+    if (m && parseInt(m[1],10) < 5) {
+      if (!await showConfirm('pollinterval is set to ' + m[1] + ', which is lower than the recommended 5. Continue anyway?')) return;
+    }
+    const body = {
+      driver: $('u-driver').value.trim(),
+      port: $('u-port').value.trim(),
+      desc: $('u-desc').value.trim(),
+      directives: {}
+    };
+    $('u-directives').value.split('\n').forEach(line => {
+      const idx = line.indexOf('=');
+      if (idx > 0) body.directives[line.slice(0,idx).trim()] = line.slice(idx+1).trim();
+    });
+    if (edit) {
+      await api('/ups/' + encodeURIComponent(name), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    } else {
+      body.name = name;
+      await api('/ups', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    }
+    closeModal(); loadUps(); loadServiceStatus();
+    showRestartDriverModal(name);
+  } catch(e) {
+    await showAlert('Failed to save UPS:\n' + e.message, 'Error');
+  } finally {
+    _upsSavePending = false;
+  }
+}
+
+function showRestartDriverModal(name) {
+  $('modal').innerHTML =
+    '<h3>UPS Saved</h3>' +
+    '<p>Configuration saved for <strong>' + esc(name) + '</strong>.</p>' +
+    '<p>Restart services and driver to apply changes immediately?</p>' +
+    '<div class="modal-actions">' +
+      '<button class="secondary" onclick="closeModal()">Close</button>' +
+      '<button class="primary" onclick="restartAllThenDriver(' + JSON.stringify(name).replace(/"/g, '&quot;') + ')">Restart Driver</button>' +
     '</div>';
   $('modal-overlay').classList.add('open');
 }
 
-async function saveUps(edit) {
-  const name = $('u-name').value.trim();
-  const body = {
-    driver: $('u-driver').value.trim(),
-    port: $('u-port').value.trim(),
-    desc: $('u-desc').value.trim(),
-    directives: {}
-  };
-  $('u-directives').value.split('\n').forEach(line => {
-    const idx = line.indexOf('=');
-    if (idx > 0) body.directives[line.slice(0,idx).trim()] = line.slice(idx+1).trim();
-  });
-  if (edit) {
-    await api('/ups/' + encodeURIComponent(name), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-  } else {
-    body.name = name;
-    await api('/ups', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-    $('modal').innerHTML = '<h3>UPS Added</h3><p>Restarting NUT services...</p>';
-    try {
-      await api('/service/restart-all', {method:'POST'});
-    } catch(e) {
-      console.error('restart-all failed:', e);
-      showAlert('Restart failed — changes may not be fully applied:\n' + e.message, 'Restart Error');
+async function restartAllThenDriver(name) {
+  if (_restartPending) return;
+  _restartPending = true;
+  $('modal').innerHTML = '<h3>Restarting...</h3><p>Please wait...</p>';
+  let msg = '';
+  try {
+    const r1 = await api('/service/restart-all', {method:'POST'});
+    if (r1.returncode !== 0) {
+      msg += 'Service restart warning:\n' + (r1.stderr || r1.stdout || 'Unknown error') + '\n\n';
     }
+  } catch(e) {
+    msg += 'Service restart failed:\n' + e.message + '\n\n';
   }
-  closeModal(); loadUps();
+  try {
+    const r2 = await api('/driver/' + encodeURIComponent(name) + '/restart', {method:'POST'});
+    msg += 'Driver restart: rc=' + r2.returncode + '\n' + (r2.stdout || '') + '\n' + (r2.stderr || '');
+  } catch(e) {
+    msg += 'Driver restart failed:\n' + e.message;
+  }
+  closeModal();
+  try {
+    await showAlert(msg, 'Restart Result');
+    loadUps();
+    loadServiceStatus();
+  } finally {
+    _restartPending = false;
+  }
 }
 
 async function scanUps() {
@@ -399,7 +531,12 @@ async function scanUps() {
 function addScannedUps(index) {
   const d = window._scanDevices[index];
   if (!d) return;
-  const directives = Object.entries(d.extra || {}).map(e => e[0] + '=' + e[1]).join('\n');
+  const map = {};
+  Object.entries(d.extra || {}).forEach(e => map[e[0]] = e[1]);
+  if (d.vendorid) map.vendorid = d.vendorid;
+  if (d.productid) map.productid = d.productid;
+  if (!map.pollinterval) map.pollinterval = '5';
+  const directives = Object.entries(map).map(e => e[0]+'='+e[1]).join('\n');
   $('modal').innerHTML =
     '<h3>Add Scanned UPS</h3>' +
     '<div class="field"><label>Name</label><input id="u-name" value="' + esc(d.scanner_name) + '"></div>' +
@@ -407,13 +544,17 @@ function addScannedUps(index) {
     '<div class="field"><label>Port</label><input id="u-port" value="' + esc(d.port || 'auto') + '"></div>' +
     '<div class="field"><label>Description</label><input id="u-desc" value="' + esc(d.desc || '') + '"></div>' +
     '<div class="field"><label>Extra directives (key=value per line)</label>' +
-      '<textarea id="u-directives" style="height:80px;font-family:var(--mono);background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;resize:vertical;">' +
-      esc(directives) + (d.vendorid ? '\nvendorid=' + esc(d.vendorid) : '') + (d.productid ? '\nproductid=' + esc(d.productid) : '') +
-      '</textarea></div>' +
+      '<textarea id="u-directives" oninput="upsCheckWarnings()" style="height:80px;font-family:var(--mono);background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;resize:vertical;">' +
+      esc(directives) +
+      '</textarea>' +
+      '<div id="u-warning" style="color:var(--yellow);font-size:0.8rem;margin-top:0.25rem;display:none;">Warning: pollinterval lower than 5 may cause instability.</div></div>' +
     '<div class="modal-actions">' +
       '<button class="secondary" onclick="closeModal()">Cancel</button>' +
+      '<button class="secondary" onclick="applyRecommendedConfig()">Apply Recommended Config</button>' +
       '<button class="primary" onclick="saveUpsScanned()">Add UPS</button>' +
     '</div>';
+  $('modal-overlay').classList.add('open');
+  upsCheckWarnings();
 }
 
 async function saveUpsScanned() {
@@ -440,9 +581,18 @@ async function loadUsers() {
 }
 
 async function deleteUser(name) {
-  if (!await showDangerConfirm('Delete user "' + name + '"?')) return;
-  await api('/users/' + encodeURIComponent(name), {method:'DELETE'});
-  loadUsers();
+  const key = 'user:' + name;
+  if (_deletePending[key]) return;
+  _deletePending[key] = true;
+  try {
+    if (!await showDangerConfirm('Delete user "' + name + '"?')) return;
+    await api('/users/' + encodeURIComponent(name), {method:'DELETE'});
+    loadUsers();
+  } catch(e) {
+    await showAlert('Failed to delete user:\n' + e.message, 'Error');
+  } finally {
+    delete _deletePending[key];
+  }
 }
 
 function openUserModal(u) {
@@ -463,22 +613,30 @@ function openUserModal(u) {
 }
 
 async function saveUser(edit) {
-  const name = $('usr-name').value.trim();
-  const body = {};
-  const pass = $('usr-pass').value;
-  if (pass) body.password = pass;
-  const upsmon = $('usr-upsmon').value.trim(); if (upsmon) body.upsmon = upsmon;
-  const actions = $('usr-actions').value.trim(); if (actions) body.actions = actions;
-  const instcmds = $('usr-instcmds').value.trim(); if (instcmds) body.instcmds = instcmds;
-  if (edit) {
-    await api('/users/' + encodeURIComponent(name), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-  } else {
-    if (!pass) { await showAlert('Password is required for new users', 'Validation Error'); return; }
-    body.name = name;
-    body.password = pass;
-    await api('/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if (_userSavePending) return;
+  _userSavePending = true;
+  try {
+    const name = $('usr-name').value.trim();
+    const body = {};
+    const pass = $('usr-pass').value;
+    if (pass) body.password = pass;
+    const upsmon = $('usr-upsmon').value.trim(); if (upsmon) body.upsmon = upsmon;
+    const actions = $('usr-actions').value.trim(); if (actions) body.actions = actions;
+    const instcmds = $('usr-instcmds').value.trim(); if (instcmds) body.instcmds = instcmds;
+    if (edit) {
+      await api('/users/' + encodeURIComponent(name), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    } else {
+      if (!pass) { await showAlert('Password is required for new users', 'Validation Error'); return; }
+      body.name = name;
+      body.password = pass;
+      await api('/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    }
+    closeModal(); loadUsers();
+  } catch(e) {
+    await showAlert('Failed to save user:\n' + e.message, 'Error');
+  } finally {
+    _userSavePending = false;
   }
-  closeModal(); loadUsers();
 }
 
 function startLogStream() {
@@ -542,8 +700,12 @@ async function saveConfig() {
   if (!currentConfigFile) { await showAlert('No config loaded', 'Error'); return; }
   if (currentConfigFile === 'upsd.users') { await showAlert('upsd.users is read-only', 'Error'); return; }
   const body = $('config-editor').value;
-  await api('/config/' + encodeURIComponent(currentConfigFile), {method:'PUT', body});
-  await showAlert('Saved ' + currentConfigFile, 'Config Saved');
+  try {
+    await api('/config/' + encodeURIComponent(currentConfigFile), {method:'PUT', body});
+    await showAlert('Saved ' + currentConfigFile, 'Config Saved');
+  } catch(e) {
+    await showAlert('Failed to save config:\n' + e.message, 'Error');
+  }
 }
 
 function closeModal() {
@@ -574,6 +736,7 @@ document.addEventListener('click', function(e) {
 
 loadUps();
 loadUsers();
+loadServiceStatus();
 startLogStream();
 </script>
 </body>
