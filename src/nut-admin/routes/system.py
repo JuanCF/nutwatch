@@ -7,6 +7,7 @@ from services.system import (
     restart_monitor,
     restart_all,
     service_status,
+    detailed_service_status,
     driver_action,
     get_config,
     put_config,
@@ -54,12 +55,18 @@ def service_action_handler(action):
     return jsonify({"returncode": rc, "stdout": out, "stderr": err})
 
 
+@system_bp.route("/api/service/status-detailed", methods=["GET"])
+@require_admin
+def service_status_detailed_handler():
+    return jsonify(detailed_service_status())
+
+
 @system_bp.route("/api/driver/<ups_name>/<action>", methods=["POST"])
 @require_admin
 def driver_action_handler(ups_name, action):
     if not IDENTIFIER_REGEX.match(ups_name):
         return jsonify({"error": "invalid ups name"}), 400
-    if action not in ("start", "stop"):
+    if action not in ("start", "stop", "restart"):
         return jsonify({"error": "unknown action"}), 400
     rc, out, err = driver_action(ups_name, action)
     return jsonify({"returncode": rc, "stdout": out, "stderr": err})

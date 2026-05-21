@@ -58,3 +58,26 @@ def find_monitor_user(content: str) -> tuple:
         if e.get("upsmon") in ("master", "slave"):
             return e["name"], e.get("password", ""), e["upsmon"]
     return None, None, None
+
+
+def ensure_minsupplies(content: str, value: int = 0) -> str:
+    if content is None:
+        content = ""
+    lines = content.splitlines()
+    for line in lines:
+        if re.match(r"^\s*MINSUPPLIES\s+\d+", line, re.IGNORECASE):
+            return content
+    lines.append(f"MINSUPPLIES {value}")
+    return "\n".join(lines)
+
+
+def set_minsupplies(content: str, value: int = 0) -> str:
+    if content is None:
+        content = ""
+    lines = content.splitlines()
+    for i, line in enumerate(lines):
+        if re.match(r"^\s*MINSUPPLIES\s+\d+", line, re.IGNORECASE):
+            lines[i] = f"MINSUPPLIES {value}"
+            return "\n".join(lines)
+    lines.append(f"MINSUPPLIES {value}")
+    return "\n".join(lines)

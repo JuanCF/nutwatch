@@ -6,6 +6,8 @@ from .monitor import (
     remove_monitor_line,
     add_monitor_line,
     find_monitor_user,
+    ensure_minsupplies,
+    set_minsupplies,
 )
 
 __all__ = [
@@ -18,4 +20,6 @@ __all__ = [
     "remove_monitor_line",
     "add_monitor_line",
     "find_monitor_user",
+    "ensure_minsupplies",
+    "set_minsupplies",
 ]
