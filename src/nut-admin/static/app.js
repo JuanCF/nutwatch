@@ -79,7 +79,9 @@ async function api(path, opts) {
 }
 
 function badge(status) {
-  const s = (status || 'unknown').toLowerCase();
+  const allowed = ['online', 'onbatt', 'offline', 'unknown'];
+  const raw = (status || 'unknown').toLowerCase();
+  const s = allowed.includes(raw) ? raw : 'unknown';
   return '<span class="badge ' + s + '">' + s + '</span>';
 }
 

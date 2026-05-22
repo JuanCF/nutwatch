@@ -1,7 +1,7 @@
 import glob
 import os
 
-from config import NUT_DIR, ALLOWED_CONFIGS
+from config import NUT_DIR, ALLOWED_CONFIGS, IDENTIFIER_REGEX
 from utils import run_cmd, read_file, write_file, stop_driver_and_cleanup
 
 
@@ -46,6 +46,8 @@ def _remove_stale_pid_files(ups_name: str) -> None:
 
 
 def driver_action(ups_name: str, action: str):
+    if not IDENTIFIER_REGEX.fullmatch(ups_name):
+        return 1, "", f"Invalid UPS name: {ups_name}"
     if action == "stop":
         return stop_driver_and_cleanup(ups_name)
     if action == "restart":

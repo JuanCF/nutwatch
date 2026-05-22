@@ -49,27 +49,43 @@ def stop_driver_and_cleanup(name: str) -> tuple:
     rc, out, err = run_cmd(["upsdrvctl", "stop", name], timeout=30)
 
     # 2. Fallback for modern systemd-managed NUT (nut-driver-enumerator).
-    run_cmd(["systemctl", "stop", f"nut-driver@{name}"], timeout=15)
+    rc2, _, _ = run_cmd(["systemctl", "stop", f"nut-driver@{name}"], timeout=15)
 
     # 3. Kill by PID file and remove the files so subsequent starts don't warn.
+    fallback_ok = False
     for base in ("/var/run/nut", "/run/nut"):
         for pid_file in glob.glob(os.path.join(base, f"*-{name}.pid")):
             try:
                 with open(pid_file, "r", encoding="utf-8") as f:
                     pid = f.read().strip()
                 if pid and pid.isdigit():
-                    run_cmd(["kill", "-9", pid], timeout=5)
+                    rc3, _, _ = run_cmd(["kill", "-9", pid], timeout=5)
+                    if rc3 == 0:
+                        fallback_ok = True
+                    try:
+                        os.kill(int(pid), 0)
+                    except ProcessLookupError:
+                        pass
+                    except (PermissionError, OSError):
+                        continue
+                    else:
+                        continue
+                try:
+                    os.unlink(pid_file)
+                except OSError:
+                    pass
             except (OSError, ValueError):
-                pass
-            try:
-                os.unlink(pid_file)
-            except OSError:
                 pass
 
     # 4. Final safety net: pkill any remaining driver processes for this UPS.
     #    pkill -f interprets POSIX Extended Regular Expressions.
     safe_name = re.escape(name)
-    run_cmd(["pkill", "-9", "-f", f".*-a[[:space:]]+{safe_name}"], timeout=5)
+    rc4, _, _ = run_cmd(["pkill", "-9", "-f", f".*-a[[:space:]]+{safe_name}"], timeout=5)
+
+    if rc != 0 and (rc2 == 0 or rc4 == 0 or fallback_ok):
+        rc = 0
+        out = ""
+        err = ""
 
     return rc, out, err
 
