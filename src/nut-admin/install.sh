@@ -18,6 +18,7 @@ tar -xzf /tmp/nut-admin.tar.gz -C /opt/nut-admin/
 rm -f /tmp/nut-admin.tar.gz
 
 echo "[NUT-ADMIN] Installing notifycmd sample script..."
+mkdir -p /etc/nut
 if [[ -f /opt/nut-admin/scripts/notifycmd.sh ]]; then
   cp /opt/nut-admin/scripts/notifycmd.sh /etc/nut/notifycmd.sh
   chmod 750 /etc/nut/notifycmd.sh

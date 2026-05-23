@@ -5,8 +5,7 @@
 
 WEBHOOK_URL="https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN"
 
-curl -fsSL -X POST \
-  -H 'Content-Type: application/json' \
-  -d "{\"content\":\"🚨 UPS $UPSNAME is on battery! Event: $NOTIFYTYPE at $(date)\"}" \
-  "$WEBHOOK_URL" \
+jq -n --arg ups "$UPSNAME" --arg event "$NOTIFYTYPE" --arg time "$(date)" \
+  '{content:"🚨 UPS \($ups) is on battery! Event: \($event) at \($time)"}' |
+  curl -fsSL -X POST -H 'Content-Type: application/json' -d @- "$WEBHOOK_URL" \
   >>/var/log/nut/notifycmd.log 2>&1

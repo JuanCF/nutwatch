@@ -59,6 +59,11 @@ def put_upsmon_config(data: dict):
             if not isinstance(val, int) or val <= 0:
                 raise ValueError(f"{tkey} must be a positive integer")
 
+    # Validate minsupplies
+    minsupplies = data.get("minsupplies", 1)
+    if not isinstance(minsupplies, int) or minsupplies < 0:
+        raise ValueError(f"minsupplies must be an integer >= 0")
+
     # Validate monitors
     for i, m in enumerate(data.get("monitors", [])):
         upsname = m.get("upsname", "")
@@ -70,6 +75,12 @@ def put_upsmon_config(data: dict):
         power = m.get("power", 0)
         if not isinstance(power, int) or power < 0:
             raise ValueError(f"power in monitor[{i}] must be >= 0")
+        username = m.get("username", "")
+        if not isinstance(username, str) or not username:
+            raise ValueError(f"missing or invalid username in monitor[{i}]")
+        password = m.get("password", "")
+        if not isinstance(password, str) or not password:
+            raise ValueError(f"missing or invalid password in monitor[{i}]")
 
     # Validate monitors[].upsname exists in ups.conf
     try:
@@ -79,6 +90,10 @@ def put_upsmon_config(data: dict):
     ups_entries = parse_ups_conf(ups_content)
     ups_names = {e["name"] for e in ups_entries}
     for i, m in enumerate(data.get("monitors", [])):
+        if not isinstance(m.get("username", ""), str) or not m.get("username", ""):
+            raise ValueError(f"missing or invalid username in monitor[{i}]")
+        if not isinstance(m.get("password", ""), str) or not m.get("password", ""):
+            raise ValueError(f"missing or invalid password in monitor[{i}]")
         if m["upsname"] not in ups_names:
             raise ValueError(
                 f"upsname {m['upsname']!r} in monitor[{i}] does not exist in ups.conf"

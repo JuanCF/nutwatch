@@ -479,7 +479,7 @@ LOGFILE="/var/log/nut/notifycmd.log"
 HOOKDIR="/etc/nut/notify.d"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 echo "[$TIMESTAMP] UPS=$UPSNAME EVENT=$NOTIFYTYPE" >>"$LOGFILE"
-[[ -x "$HOOKDIR/${UPSNAME}_${NOTIFYTYPE}.sh" ]] && "$HOOKDIR/${UPSNAME}_${NOTIFYTYPE}.sh" >>"$LOGFILE" 2>&1
+[[ -x "$HOOKDIR/${UPSNAME%%@*}_${NOTIFYTYPE}.sh" ]] && "$HOOKDIR/${UPSNAME%%@*}_${NOTIFYTYPE}.sh" >>"$LOGFILE" 2>&1
 NOTIFY_EOF
 ```
 

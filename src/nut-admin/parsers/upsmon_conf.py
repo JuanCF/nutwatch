@@ -143,13 +143,19 @@ def serialize_upsmon_conf(data: dict) -> str:
             raise ValueError("Invalid powerdownflag: contains newline")
         lines.append(f'POWERDOWNFLAG "{val}"')
 
+    EVENT_TOKEN_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
+
     for event in sorted(data.get("notify_msg", {}).keys()):
+        if not EVENT_TOKEN_RE.match(event):
+            raise ValueError(f"Invalid notify_msg event name: {event!r}")
         msg = data["notify_msg"][event]
         if "\n" in msg or "\r" in msg:
             raise ValueError(f"Invalid notify_msg for {event}: contains newline")
         lines.append(f'NOTIFYMSG {event} "{msg}"')
 
     for event in sorted(data.get("notify_flag", {}).keys()):
+        if not EVENT_TOKEN_RE.match(event):
+            raise ValueError(f"Invalid notify_flag event name: {event!r}")
         flags = data["notify_flag"][event]
         if flags:
             lines.append(f"NOTIFYFLAG {event} {' '.join(flags)}")

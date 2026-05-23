@@ -12,6 +12,8 @@ hooks_bp = Blueprint("hooks", __name__)
 def get_hook_handler(upsname, event):
     if not IDENTIFIER_REGEX.match(upsname):
         return jsonify({"error": "invalid ups name"}), 400
+    if not IDENTIFIER_REGEX.match(event):
+        return jsonify({"error": "invalid event"}), 400
     content = get_hook(upsname, event)
     if content is None:
         return jsonify({"error": "not found"}), 404
@@ -23,6 +25,8 @@ def get_hook_handler(upsname, event):
 def put_hook_handler(upsname, event):
     if not IDENTIFIER_REGEX.match(upsname):
         return jsonify({"error": "invalid ups name"}), 400
+    if not IDENTIFIER_REGEX.match(event):
+        return jsonify({"error": "invalid event"}), 400
     data = request.get_json(force=True) or {}
     content = data.get("content", "")
     try:
@@ -37,5 +41,7 @@ def put_hook_handler(upsname, event):
 def delete_hook_handler(upsname, event):
     if not IDENTIFIER_REGEX.match(upsname):
         return jsonify({"error": "invalid ups name"}), 400
+    if not IDENTIFIER_REGEX.match(event):
+        return jsonify({"error": "invalid event"}), 400
     delete_hook(upsname, event)
     return jsonify({"ok": True})

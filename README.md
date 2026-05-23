@@ -16,7 +16,7 @@ A bash script to automatically create an Ubuntu 24.04 VM on Proxmox VE, configur
 - 📊 **Status Summary** - Provides test commands and client configuration snippets
 - 🛡️ **Error Handling** - Validates inputs, handles edge cases (duplicate UPS models, slow DHCP, etc.)
 - 🔑 **Auto-Generated Passwords** - Optionally generate secure passwords automatically
- - 🌐 **Web Admin UI** - Installs `nut-admin` (Flask app on port 8081) for managing NUT configs, notifications, and per-UPS event hooks via browser
+- 🌐 **Web Admin UI** - Installs `nut-admin` (Flask app on port 8081) for managing NUT configs, notifications, and per-UPS event hooks via browser
 
 ## Supported UPS Vendors
 

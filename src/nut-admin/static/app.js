@@ -557,6 +557,7 @@ async function loadNotifications() {
     const cfg = await api('/upsmon/config');
     const upsList = await api('/ups');
     const upsNames = upsList.map(u => u.name);
+    _cachedUpsNames = upsNames;
     let html = '';
 
     // Monitor lines
@@ -572,6 +573,7 @@ async function loadNotifications() {
 
     // Global commands
     html += '<h3>Global Commands</h3>';
+    html += '<div class="field"><label>MINSUPPLIES</label><input type="number" min="0" id="n-minsupplies" value="' + esc(cfg.minsupplies != null ? cfg.minsupplies : 1) + '"></div>';
     html += '<div class="field"><label>SHUTDOWNCMD</label><input id="n-shutdowncmd" value="' + esc(cfg.shutdowncmd || '') + '"></div>';
     html += '<div class="field"><label>NOTIFYCMD</label><input id="n-notifycmd" value="' + esc(cfg.notifycmd || '') + '"></div>';
     html += '<div class="field"><label>POWERDOWNFLAG</label><input id="n-powerdownflag" value="' + esc(cfg.powerdownflag || '') + '"></div>';
@@ -636,9 +638,9 @@ function addMonitorRow() {
   const tbody = $('notify-monitors-body');
   if (!tbody) return;
   const idx = tbody.querySelectorAll('tr').length;
-  // get ups names from existing select in first row, or fetch
   const firstSelect = tbody.querySelector('select');
-  const upsNames = firstSelect ? Array.from(firstSelect.options).map(o => o.value) : [];
+  let upsNames = firstSelect ? Array.from(firstSelect.options).map(o => o.value) : [];
+  if (!upsNames.length) upsNames = _cachedUpsNames;
   const row = document.createElement('tr');
   row.setAttribute('data-mon-idx', idx);
   let select = '<select id="n-mon-' + idx + '-upsname">';
@@ -723,9 +725,10 @@ async function saveNotifications() {
       if (flags.length) notify_flag[evt] = flags;
     });
 
+    const minsuppliesVal = parseInt($('n-minsupplies').value, 10);
     const body = {
       monitors: monitors,
-      minsupplies: 1,
+      minsupplies: isNaN(minsuppliesVal) ? 1 : minsuppliesVal,
       shutdowncmd: $('n-shutdowncmd').value.trim() || null,
       notifycmd: $('n-notifycmd').value.trim() || null,
       powerdownflag: $('n-powerdownflag').value.trim() || null,
@@ -773,6 +776,7 @@ async function restartMonitorThenClose() {
 
 let _hooksSavePending = false;
 let _currentHooksUps = '';
+let _cachedUpsNames = [];
 
 function openHooksSection(upsname) {
   _currentHooksUps = upsname;

@@ -9,6 +9,11 @@
 REMOTE="root@192.168.1.50"
 DELAY="1" # minutes
 
-ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
-  "$REMOTE" "shutdown -h +$DELAY 'UPS $UPSNAME on battery — shutting down in $DELAY min'" \
+# WARNING: Disabling host-key verification exposes the connection to
+# man-in-the-middle attacks. For a secure setup, accept the remote host
+# key once manually (ssh root@192.168.1.50) or manage known_hosts.
+SAFE_UPSNAME=$(printf '%q' "$UPSNAME")
+SAFE_DELAY=$(printf '%q' "$DELAY")
+ssh -o ConnectTimeout=10 "$REMOTE" \
+  "shutdown -h +${SAFE_DELAY} 'UPS ${SAFE_UPSNAME} on battery — shutting down in ${SAFE_DELAY} min'" \
   >>/var/log/nut/notifycmd.log 2>&1
