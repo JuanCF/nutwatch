@@ -80,7 +80,7 @@ def stop_driver_and_cleanup(name: str) -> tuple:
     # 4. Final safety net: pkill any remaining driver processes for this UPS.
     #    pkill -f interprets POSIX Extended Regular Expressions.
     safe_name = re.escape(name)
-    rc4, _, _ = run_cmd(["pkill", "-9", "-f", f".*-a[[:space:]]+{safe_name}"], timeout=5)
+    rc4, _, _ = run_cmd(["pkill", "-9", "-f", f".*-a[[:space:]]+{safe_name}([[:space:]]|$)"], timeout=5)
 
     if rc != 0 and (rc2 == 0 or rc4 == 0 or fallback_ok):
         rc = 0

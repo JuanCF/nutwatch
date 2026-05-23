@@ -309,7 +309,7 @@ New test functions:
 
 Add after `MINSUPPLIES 1`:
 
-```
+```conf
 NOTIFYCMD "/etc/nut/notifycmd.sh"
 ```
 
