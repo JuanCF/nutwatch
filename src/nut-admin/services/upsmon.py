@@ -62,7 +62,7 @@ def put_upsmon_config(data: dict):
     # Validate minsupplies
     minsupplies = data.get("minsupplies", 1)
     if not isinstance(minsupplies, int) or minsupplies < 0:
-        raise ValueError(f"minsupplies must be an integer >= 0")
+        raise ValueError("minsupplies must be an integer >= 0")
 
     # Validate monitors
     for i, m in enumerate(data.get("monitors", [])):
