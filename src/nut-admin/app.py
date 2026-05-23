@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover
     Flask = _FakeFlask
 
 from config import NUT_ADMIN_HOST, NUT_ADMIN_PORT
-from routes import ups_bp, users_bp, system_bp, logs_bp
+from routes import ups_bp, users_bp, upsmon_bp, hooks_bp, system_bp, logs_bp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("nut-admin")
@@ -29,6 +29,8 @@ def create_app():
 
     app.register_blueprint(ups_bp)
     app.register_blueprint(users_bp)
+    app.register_blueprint(upsmon_bp)
+    app.register_blueprint(hooks_bp)
     app.register_blueprint(system_bp)
     app.register_blueprint(logs_bp)
 

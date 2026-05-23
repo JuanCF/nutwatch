@@ -17,6 +17,16 @@ curl -fsSL "${NUT_ADMIN_TARBALL_URL}" -o /tmp/nut-admin.tar.gz
 tar -xzf /tmp/nut-admin.tar.gz -C /opt/nut-admin/
 rm -f /tmp/nut-admin.tar.gz
 
+echo "[NUT-ADMIN] Installing notifycmd sample script..."
+if [[ -f /opt/nut-admin/scripts/notifycmd.sh ]]; then
+  cp /opt/nut-admin/scripts/notifycmd.sh /etc/nut/notifycmd.sh
+  chmod 750 /etc/nut/notifycmd.sh
+  chown root:nut /etc/nut/notifycmd.sh
+fi
+mkdir -p /etc/nut/notify.d /var/log/nut
+chown root:nut /etc/nut/notify.d && chmod 750 /etc/nut/notify.d
+chown nut:nut /var/log/nut
+
 echo "[NUT-ADMIN] Setting up Python virtual environment..."
 python3 -m venv /opt/nut-admin/venv
 /opt/nut-admin/venv/bin/pip install --quiet -r /opt/nut-admin/requirements.txt

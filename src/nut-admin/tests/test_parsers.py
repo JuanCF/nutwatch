@@ -1,6 +1,7 @@
 from parsers import (
     parse_ups_conf, serialize_ups_conf,
     parse_upsd_users, serialize_upsd_users,
+    parse_upsmon_conf, serialize_upsmon_conf,
     parse_nut_scanner_output,
     parse_monitor_lines, remove_monitor_line, add_monitor_line,
     find_monitor_user,
@@ -196,3 +197,83 @@ def test_ensure_minsupplies_none_input():
 def test_set_minsupplies_none_input():
     assert set_minsupplies(None, 0) == "MINSUPPLIES 0"
     assert set_minsupplies(None, 2) == "MINSUPPLIES 2"
+
+
+def test_parse_upsmon_conf_basic():
+    content = "MONITOR ups@localhost 1 monuser secret master\nMINSUPPLIES 1\n"
+    result = parse_upsmon_conf(content)
+    assert len(result["monitors"]) == 1
+    assert result["monitors"][0]["upsname"] == "ups"
+    assert result["monitors"][0]["hostspec"] == "@localhost"
+    assert result["monitors"][0]["power"] == 1
+    assert result["monitors"][0]["username"] == "monuser"
+    assert result["monitors"][0]["password"] == "secret"
+    assert result["monitors"][0]["role"] == "master"
+    assert result["minsupplies"] == 1
+
+
+def test_upsmon_conf_roundtrip():
+    content = (
+        "MONITOR ups@localhost:3493 1 monuser secret master\n"
+        "MINSUPPLIES 1\n"
+        'SHUTDOWNCMD "/sbin/shutdown -h +0"\n'
+        'NOTIFYCMD "/etc/nut/notifycmd.sh"\n'
+        'POWERDOWNFLAG "/etc/killpower"\n'
+        'NOTIFYMSG ONLINE "UPS %s on line power"\n'
+        'NOTIFYMSG ONBATT "UPS %s on battery"\n'
+        "NOTIFYFLAG ONLINE SYSLOG+WALL\n"
+        "NOTIFYFLAG ONBATT SYSLOG WALL EXEC\n"
+        "POLLFREQ 5\n"
+        "POLLFREQALERT 5\n"
+        "HOSTSYNC 15\n"
+        "DEADTIME 15\n"
+        "RBWARNTIME 43200\n"
+        "NOCOMMWARNTIME 300\n"
+        "FINALDELAY 5\n"
+    )
+    result = parse_upsmon_conf(content)
+    serialized = serialize_upsmon_conf(result)
+    result2 = parse_upsmon_conf(serialized)
+    assert result == result2
+
+
+def test_upsmon_conf_notifyflag_plus():
+    content = "NOTIFYFLAG ONLINE SYSLOG+WALL\n"
+    result = parse_upsmon_conf(content)
+    assert result["notify_flag"]["ONLINE"] == ["SYSLOG", "WALL"]
+
+
+def test_upsmon_conf_notifyflag_space():
+    content = "NOTIFYFLAG ONLINE SYSLOG WALL\n"
+    result = parse_upsmon_conf(content)
+    assert result["notify_flag"]["ONLINE"] == ["SYSLOG", "WALL"]
+
+
+def test_upsmon_conf_notifymsg_quotes():
+    content = 'NOTIFYMSG ONLINE "UPS %s ok"\n'
+    result = parse_upsmon_conf(content)
+    assert result["notify_msg"]["ONLINE"] == "UPS %s ok"
+
+
+def test_upsmon_conf_multiple_monitors():
+    content = (
+        "MONITOR ups1@localhost 1 user1 pass1 master\n"
+        "MONITOR ups2@remote:3493 1 user2 pass2 slave\n"
+    )
+    result = parse_upsmon_conf(content)
+    assert len(result["monitors"]) == 2
+    assert result["monitors"][0]["upsname"] == "ups1"
+    assert result["monitors"][1]["upsname"] == "ups2"
+
+
+def test_upsmon_conf_ignore_unknown():
+    content = "MONITOR ups@localhost 1 monuser secret master\nSOMETHING weird\n"
+    result = parse_upsmon_conf(content)
+    assert len(result["monitors"]) == 1
+
+
+def test_upsmon_conf_empty():
+    result = parse_upsmon_conf("")
+    serialized = serialize_upsmon_conf(result)
+    result2 = parse_upsmon_conf(serialized)
+    assert result == result2

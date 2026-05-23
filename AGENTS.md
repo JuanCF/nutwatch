@@ -44,6 +44,8 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 ## nut-admin (src/nut-admin/)
 
 - Modular Flask app: `app.py` (bootstrap), `auth.py` (Bearer auth), `config.py` (constants), `utils.py` (helpers), `parsers/` (config parsers), `services/` (business logic), `routes/` (API blueprints), `static/` (SPA frontend).
+- Web UI tabs: **UPS Devices** (with per-UPS hook editor), **Users**, **Notifications** (`upsmon.conf` editor), **Logs**, **Config Files**.
+- API endpoints: `/api/ups`, `/api/users`, `/api/upsmon/config`, `/api/hooks/<upsname>/<event>`, `/api/service/...`, `/api/logs/...`.
 - Runs as `nut-admin.service` on port 8081 (configurable via `NUT_ADMIN_HOST`, `NUT_ADMIN_PORT` env vars).
 - Auth: Bearer token via `NUT_ADMIN_API_KEY` env var — if empty, auth is disabled.
 - Config writes use atomic `tempfile` + `os.replace`; input validated with `IDENTIFIER_REGEX`.
@@ -53,9 +55,13 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 ## Edge Cases
 
 - Partial image download: uses `wget -c` for resume.
-- Duplicate `VENDOR:PRODUCT` UPS models: falls back to bus-port notation.
+- Duplicate `VENDOR:PRODUCT` UPS models: falls back to bus-port notation (`host=4-1`).
 - Slow DHCP / guest agent: retries for up to 5 minutes.
 - virt-customize network failure on Debian 13 (Proxmox VE 9): auto-installs `dhcpcd-base` when missing.
 - NUT service enablement varies by distro: `nut-driver-enumerator` → `nut-driver@` → `nut-driver`. Each unit is enabled individually with `|| true` so missing units don't abort the whole run.
 - nut-admin install failure inside virt-customize: wrapped in `&& ... || echo` so a download failure doesn't abort the VM setup.
 - Script interruption: `trap INT TERM` kills spinner, cleans up working disk image, and prints interrupt message.
+- Hook ownership: per-UPS hook scripts must be `root:nut 750` so `upsmon` (running as the `nut` user) can execute them. `services/hooks.py::put_hook()` explicitly `chown`s to `root:nut` after writing.
+- `$UPSNAME` environment variable includes `@host:port` (e.g. `ups@localhost:3493`), but hook filenames use the bare UPS name. `notifycmd.sh` strips the suffix with `${UPSNAME%%@*}` before looking for the hook file.
+- UPS deletion cleans up orphaned hooks: `services/ups.py::delete_ups()` calls `delete_hook(name, event)` for every existing hook before returning.
+- `NOTIFYFLAG` must include `EXEC` for `upsmon` to actually invoke `NOTIFYCMD`. The VM template sets `SYSLOG+WALL+EXEC` for all 9 events by default.

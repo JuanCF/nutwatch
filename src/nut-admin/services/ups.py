@@ -11,6 +11,7 @@ from parsers.monitor import (
     set_minsupplies,
 )
 from parsers.nut_scanner import parse_nut_scanner_output
+from services.hooks import delete_hook, list_hooks
 from utils import read_file, write_file, run_cmd, ups_status, stop_driver_and_cleanup
 
 DEFAULT_POLLINTERVAL = "5"
@@ -166,6 +167,10 @@ def delete_ups(name: str) -> bool:
             write_file(upsmon_path, upsmon_content)
         except FileNotFoundError:
             pass
+
+    # Clean up per-UPS hook scripts
+    for event in list_hooks(name):
+        delete_hook(name, event)
 
     return True
 

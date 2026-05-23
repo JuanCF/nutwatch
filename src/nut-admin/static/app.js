@@ -66,6 +66,7 @@ function showSection(id, btn) {
   $('sec-' + id).classList.add('active');
   btn.classList.add('active');
   if (id === 'logs' && !es) startLogStream();
+  if (id === 'notifications') loadNotifications();
 }
 
 async function api(path, opts) {
@@ -117,6 +118,7 @@ async function loadUps() {
       (dirs ? '<div class="meta">' + dirs + '</div>' : '') +
       '<div class="actions">' +
         '<button class="secondary" onclick="openUpsModal(' + JSON.stringify(u).replace(/"/g,'&quot;') + ')">Edit</button>' +
+        '<button class="secondary" onclick="openHooksSection(' + JSON.stringify(u.name).replace(/"/g,'&quot;') + ')">Hooks</button>' +
         '<button class="secondary" data-ups-name="' + esc(u.name) + '" data-action="start">Start driver</button>' +
         '<button class="secondary" data-ups-name="' + esc(u.name) + '" data-action="stop">Stop driver</button>' +
         '<button class="secondary danger" data-ups-name="' + esc(u.name) + '" data-action="delete">Delete</button>' +
@@ -546,7 +548,335 @@ document.addEventListener('click', function(e) {
   deleteUser(name);
 });
 
+let _notificationsSavePending = false;
+const NOTIFICATION_EVENTS = ['ONLINE','ONBATT','LOWBATT','COMMOK','COMMBAD','SHUTDOWN','REPLBATT','NOCOMM','NOPARENT'];
+
+async function loadNotifications() {
+  const container = $('notifications-form');
+  try {
+    const cfg = await api('/upsmon/config');
+    const upsList = await api('/ups');
+    const upsNames = upsList.map(u => u.name);
+    let html = '';
+
+    // Monitor lines
+    html += '<h3>Monitor Lines</h3>';
+    html += '<div id="notify-monitors-wrap"><table id="notify-monitors-table"><thead><tr><th>UPS Name</th><th>Host</th><th>Power</th><th>Username</th><th>Password</th><th>Role</th><th></th></tr></thead><tbody id="notify-monitors-body">';
+    if (cfg.monitors && cfg.monitors.length) {
+      cfg.monitors.forEach((m, idx) => {
+        html += monitorRowHtml(idx, m, upsNames);
+      });
+    }
+    html += '</tbody></table></div>';
+    html += '<button class="secondary" onclick="addMonitorRow()">Add Monitor</button>';
+
+    // Global commands
+    html += '<h3>Global Commands</h3>';
+    html += '<div class="field"><label>SHUTDOWNCMD</label><input id="n-shutdowncmd" value="' + esc(cfg.shutdowncmd || '') + '"></div>';
+    html += '<div class="field"><label>NOTIFYCMD</label><input id="n-notifycmd" value="' + esc(cfg.notifycmd || '') + '"></div>';
+    html += '<div class="field"><label>POWERDOWNFLAG</label><input id="n-powerdownflag" value="' + esc(cfg.powerdownflag || '') + '"></div>';
+
+    // Timing parameters
+    html += '<h3>Timing Parameters</h3>';
+    html += '<div class="field-grid">';
+    ['POLLFREQ','POLLFREQALERT','HOSTSYNC','DEADTIME','RBWARNTIME','NOCOMMWARNTIME','FINALDELAY'].forEach(key => {
+      html += '<div class="field"><label>' + key + '</label><input type="number" min="1" id="n-timing-' + key + '" value="' + esc((cfg.timing && cfg.timing[key] != null ? cfg.timing[key] : '')) + '"></div>';
+    });
+    html += '</div>';
+
+    // Notification messages & flags
+    html += '<h3>Notification Messages &amp; Flags</h3>';
+    html += '<table id="notify-events-table"><thead><tr><th>Event</th><th>Message</th><th>SYSLOG</th><th>WALL</th><th>EXEC</th><th>IGNORE</th></tr></thead><tbody>';
+    NOTIFICATION_EVENTS.forEach(evt => {
+      const msg = (cfg.notify_msg && cfg.notify_msg[evt]) || '';
+      const flags = (cfg.notify_flag && cfg.notify_flag[evt]) || [];
+      html += '<tr>';
+      html += '<td>' + esc(evt) + '</td>';
+      html += '<td><input id="n-msg-' + evt + '" value="' + esc(msg) + '"></td>';
+      ['SYSLOG','WALL','EXEC','IGNORE'].forEach(flag => {
+        const checked = flags.includes(flag) ? 'checked' : '';
+        html += '<td style="text-align:center;"><input type="checkbox" id="n-flag-' + evt + '-' + flag + '" ' + checked + ' onchange="flaggedOnly(this)"></td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+
+    // Hook info box
+    html += '<div class="info-box" style="margin-top:1rem;font-size:0.9rem;">';
+    html += '<p>A sample notify script is installed at <code>/etc/nut/notifycmd.sh</code>. It logs all UPS events and runs optional hook scripts placed in <code>/etc/nut/notify.d/</code>:</p>';
+    html += '<ul><li><code>/etc/nut/notify.d/&lt;EVENT&gt;.sh</code> -- runs for a specific event from any UPS.</li>';
+    html += '<li><code>/etc/nut/notify.d/&lt;UPSNAME&gt;_&lt;EVENT&gt;.sh</code> -- runs for a specific UPS + event.</li></ul>';
+    html += '<p>To shut down another machine when UPS goes on battery, create a hook like: <code>/etc/nut/notify.d/myups_ONBATT.sh</code> containing <code>ssh root@other-machine shutdown -h now</code>.</p>';
+    html += '</div>';
+
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = '<div class="empty">Failed to load notifications config: ' + esc(e.message) + '</div>';
+  }
+}
+
+function monitorRowHtml(idx, m, upsNames) {
+  let select = '<select id="n-mon-' + idx + '-upsname">';
+  upsNames.forEach(name => {
+    select += '<option value="' + esc(name) + '"' + (name === m.upsname ? ' selected' : '') + '>' + esc(name) + '</option>';
+  });
+  select += '</select>';
+  return '<tr data-mon-idx="' + idx + '">' +
+    '<td>' + select + '</td>' +
+    '<td><input id="n-mon-' + idx + '-hostspec" value="' + esc(m.hostspec || '@localhost') + '"></td>' +
+    '<td><input type="number" min="0" id="n-mon-' + idx + '-power" value="' + esc(m.power) + '"></td>' +
+    '<td><input id="n-mon-' + idx + '-username" value="' + esc(m.username) + '"></td>' +
+    '<td><input id="n-mon-' + idx + '-password" value="' + esc(m.password) + '" placeholder="******"></td>' +
+    '<td><select id="n-mon-' + idx + '-role"><option value="master"' + (m.role==='master'?' selected':'') + '>master</option><option value="slave"' + (m.role==='slave'?' selected':'') + '>slave</option></select></td>' +
+    '<td><button class="secondary danger" onclick="removeMonitorRow(this)">Remove</button></td>' +
+    '</tr>';
+}
+
+function addMonitorRow() {
+  const tbody = $('notify-monitors-body');
+  if (!tbody) return;
+  const idx = tbody.querySelectorAll('tr').length;
+  // get ups names from existing select in first row, or fetch
+  const firstSelect = tbody.querySelector('select');
+  const upsNames = firstSelect ? Array.from(firstSelect.options).map(o => o.value) : [];
+  const row = document.createElement('tr');
+  row.setAttribute('data-mon-idx', idx);
+  let select = '<select id="n-mon-' + idx + '-upsname">';
+  upsNames.forEach(name => { select += '<option value="' + esc(name) + '">' + esc(name) + '</option>'; });
+  select += '</select>';
+  row.innerHTML =
+    '<td>' + select + '</td>' +
+    '<td><input id="n-mon-' + idx + '-hostspec" value="@localhost"></td>' +
+    '<td><input type="number" min="0" id="n-mon-' + idx + '-power" value="1"></td>' +
+    '<td><input id="n-mon-' + idx + '-username" value=""></td>' +
+    '<td><input id="n-mon-' + idx + '-password" value=""></td>' +
+    '<td><select id="n-mon-' + idx + '-role"><option value="master">master</option><option value="slave">slave</option></select></td>' +
+    '<td><button class="secondary danger" onclick="removeMonitorRow(this)">Remove</button></td>';
+  tbody.appendChild(row);
+}
+
+function removeMonitorRow(btn) {
+  const row = btn.closest('tr');
+  if (row) row.remove();
+}
+
+function flaggedOnly(checkbox) {
+  const id = checkbox.id;
+  const evt = id.split('-')[2];
+  const flag = id.split('-')[3];
+  if (flag === 'IGNORE' && checkbox.checked) {
+    ['SYSLOG','WALL','EXEC'].forEach(f => {
+      const cb = $('n-flag-' + evt + '-' + f);
+      if (cb) { cb.checked = false; cb.disabled = true; }
+    });
+  } else if (flag === 'IGNORE' && !checkbox.checked) {
+    ['SYSLOG','WALL','EXEC'].forEach(f => {
+      const cb = $('n-flag-' + evt + '-' + f);
+      if (cb) cb.disabled = false;
+    });
+  } else if (flag !== 'IGNORE' && checkbox.checked) {
+    const ign = $('n-flag-' + evt + '-IGNORE');
+    if (ign) { ign.checked = false; ign.disabled = false; }
+    // enable other non-ignore checkboxes
+    ['SYSLOG','WALL','EXEC'].forEach(f => {
+      const cb = $('n-flag-' + evt + '-' + f);
+      if (cb) cb.disabled = false;
+    });
+  }
+}
+
+async function saveNotifications() {
+  if (_notificationsSavePending) return;
+  _notificationsSavePending = true;
+  try {
+    const monitors = [];
+    const tbody = $('notify-monitors-body');
+    if (tbody) {
+      tbody.querySelectorAll('tr').forEach(row => {
+        const idx = row.getAttribute('data-mon-idx');
+        monitors.push({
+          upsname: $('n-mon-' + idx + '-upsname').value.trim(),
+          hostspec: $('n-mon-' + idx + '-hostspec').value.trim(),
+          power: parseInt($('n-mon-' + idx + '-power').value, 10) || 0,
+          username: $('n-mon-' + idx + '-username').value.trim(),
+          password: $('n-mon-' + idx + '-password').value.trim(),
+          role: $('n-mon-' + idx + '-role').value,
+        });
+      });
+    }
+
+    const timing = {};
+    ['POLLFREQ','POLLFREQALERT','HOSTSYNC','DEADTIME','RBWARNTIME','NOCOMMWARNTIME','FINALDELAY'].forEach(key => {
+      const val = parseInt($('n-timing-' + key).value, 10);
+      if (!isNaN(val) && val > 0) timing[key] = val;
+    });
+
+    const notify_msg = {};
+    const notify_flag = {};
+    NOTIFICATION_EVENTS.forEach(evt => {
+      const msg = $('n-msg-' + evt).value.trim();
+      if (msg) notify_msg[evt] = msg;
+      const flags = [];
+      ['SYSLOG','WALL','EXEC','IGNORE'].forEach(flag => {
+        if ($('n-flag-' + evt + '-' + flag).checked) flags.push(flag);
+      });
+      if (flags.length) notify_flag[evt] = flags;
+    });
+
+    const body = {
+      monitors: monitors,
+      minsupplies: 1,
+      shutdowncmd: $('n-shutdowncmd').value.trim() || null,
+      notifycmd: $('n-notifycmd').value.trim() || null,
+      powerdownflag: $('n-powerdownflag').value.trim() || null,
+      notify_msg: notify_msg,
+      notify_flag: notify_flag,
+      timing: timing,
+    };
+
+    await api('/upsmon/config', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    await showAlert('Notifications configuration saved.', 'Saved');
+    showRestartMonitorModal();
+  } catch(e) {
+    await showAlert('Failed to save notifications:\n' + e.message, 'Error');
+  } finally {
+    _notificationsSavePending = false;
+  }
+}
+
+function showRestartMonitorModal() {
+  $('modal').innerHTML =
+    '<h3>Notifications Saved</h3>' +
+    '<p>Configuration saved successfully.</p>' +
+    '<p>Restart nut-monitor to apply changes immediately?</p>' +
+    '<div class="modal-actions">' +
+      '<button class="secondary" onclick="closeModal()">Close</button>' +
+      '<button class="primary" onclick="restartMonitorThenClose()">Restart nut-monitor</button>' +
+    '</div>';
+  $('modal-overlay').classList.add('open');
+}
+
+async function restartMonitorThenClose() {
+  closeModal();
+  try {
+    const r = await api('/service/restart-monitor', {method:'POST'});
+    if (r.returncode !== 0) {
+      await showAlert('Restart warning:\n' + (r.stderr || r.stdout || ''), 'Restart Warning');
+    } else {
+      await showAlert('nut-monitor restarted successfully.', 'Restarted');
+    }
+    loadServiceStatus();
+  } catch(e) {
+    await showAlert('Restart failed:\n' + e.message, 'Restart Error');
+  }
+}
+
+let _hooksSavePending = false;
+let _currentHooksUps = '';
+
+function openHooksSection(upsname) {
+  _currentHooksUps = upsname;
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  $('sec-hooks').classList.add('active');
+  $('hooks-ups-title').textContent = 'Hooks for: ' + esc(upsname);
+  loadHooksTable(upsname);
+}
+
+function closeHooksSection() {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  $('sec-ups').classList.add('active');
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.querySelector('nav button:first-child').classList.add('active');
+}
+
+async function loadHooksTable(upsname) {
+  const tbody = $('hooks-body');
+  tbody.innerHTML = '';
+  for (const evt of NOTIFICATION_EVENTS) {
+    const tr = document.createElement('tr');
+    let hasHook = false;
+    try {
+      const r = await api('/hooks/' + encodeURIComponent(upsname) + '/' + evt);
+      hasHook = true;
+    } catch(e) {
+      hasHook = false;
+    }
+    tr.innerHTML =
+      '<td>' + esc(evt) + '</td>' +
+      '<td>' + (hasHook ? '<span class="badge online">yes</span>' : '<span class="badge unknown">no</span>') + '</td>' +
+      '<td>' +
+        (hasHook
+          ? '<button class="secondary" onclick="openHookEditor(' + JSON.stringify(upsname).replace(/"/g,'&quot;') + ',' + JSON.stringify(evt).replace(/"/g,'&quot;') + ')">Edit</button>' +
+            '<button class="secondary danger" onclick="deleteHook(' + JSON.stringify(upsname).replace(/"/g,'&quot;') + ',' + JSON.stringify(evt).replace(/"/g,'&quot;') + ')">Delete</button>'
+          : '<button class="secondary" onclick="openHookEditor(' + JSON.stringify(upsname).replace(/"/g,'&quot;') + ',' + JSON.stringify(evt).replace(/"/g,'&quot;') + ')">Add Hook</button>'
+        ) +
+      '</td>';
+    tbody.appendChild(tr);
+  }
+}
+
+async function openHookEditor(upsname, event) {
+  let content = '';
+  try {
+    const r = await api('/hooks/' + encodeURIComponent(upsname) + '/' + event);
+    content = r.content || '';
+  } catch(e) {
+    content = '';
+  }
+  $('modal').innerHTML =
+    '<h3>' + (content ? 'Edit' : 'Add') + ' Hook</h3>' +
+    '<div class="field"><label>UPS</label><input readonly value="' + esc(upsname) + '"></div>' +
+    '<div class="field"><label>Event</label><input readonly value="' + esc(event) + '"></div>' +
+    '<div class="field"><label>Script</label>' +
+      '<textarea id="hook-script" class="script-editor" placeholder="#!/bin/bash\n# This script runs when ' + esc(event) + ' fires for ' + esc(upsname) + '.\n# Environment: $UPSNAME, $NOTIFYTYPE\n">' + esc(content) + '</textarea></div>' +
+    '<div class="modal-actions">' +
+      '<button class="secondary" onclick="closeModal()">Cancel</button>' +
+      '<button class="primary" onclick="saveHook(' + JSON.stringify(upsname).replace(/"/g,'&quot;') + ',' + JSON.stringify(event).replace(/"/g,'&quot;') + ')">Save</button>' +
+    '</div>';
+  $('modal-overlay').classList.add('open');
+  // Trap Tab key in textarea
+  $('hook-script').addEventListener('keydown', function(e) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = this.selectionStart;
+      const end = this.selectionEnd;
+      this.value = this.value.substring(0, start) + '\t' + this.value.substring(end);
+      this.selectionStart = this.selectionEnd = start + 1;
+    }
+  });
+}
+
+async function saveHook(upsname, event) {
+  if (_hooksSavePending) return;
+  _hooksSavePending = true;
+  try {
+    const content = $('hook-script').value;
+    await api('/hooks/' + encodeURIComponent(upsname) + '/' + event, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content: content})
+    });
+    closeModal();
+    loadHooksTable(upsname);
+  } catch(e) {
+    await showAlert('Failed to save hook:\n' + e.message, 'Error');
+  } finally {
+    _hooksSavePending = false;
+  }
+}
+
+async function deleteHook(upsname, event) {
+  if (!await showDangerConfirm('Delete hook for ' + upsname + ' on ' + event + '?')) return;
+  try {
+    await api('/hooks/' + encodeURIComponent(upsname) + '/' + event, {method: 'DELETE'});
+    loadHooksTable(upsname);
+  } catch(e) {
+    await showAlert('Failed to delete hook:\n' + e.message, 'Error');
+  }
+}
+
 loadUps();
 loadUsers();
+loadNotifications();
 loadServiceStatus();
 startLogStream();

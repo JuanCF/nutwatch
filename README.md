@@ -16,7 +16,7 @@ A bash script to automatically create an Ubuntu 24.04 VM on Proxmox VE, configur
 - 📊 **Status Summary** - Provides test commands and client configuration snippets
 - 🛡️ **Error Handling** - Validates inputs, handles edge cases (duplicate UPS models, slow DHCP, etc.)
 - 🔑 **Auto-Generated Passwords** - Optionally generate secure passwords automatically
-- 🌐 **Web Admin UI** - Installs `nut-admin` (Flask app on port 8081) for managing NUT configs via browser
+ - 🌐 **Web Admin UI** - Installs `nut-admin` (Flask app on port 8081) for managing NUT configs, notifications, and per-UPS event hooks via browser
 
 ## Supported UPS Vendors
 
@@ -277,13 +277,13 @@ The script automatically sets `chmod 640` and `chown root:nut` on all NUT config
 Proxmox Host
 ├── USB UPS Device
 │   └── USB Passthrough ──┐
-│                         ▼
-├── vm/nut-vm.sh   VM (Ubuntu 24.04 minimal)
-│   ├── Downloads        │   ├── NUT Server
-│   ├── virt-customize ─►│   │   ├── nut-driver (usbhid-ups)
-│   ├── Creates VM       │   │   ├── upsd (port 3493)
-│   ├── Detects UPS      │   │   ├── upsmon
-│   └── Configures       │   └── nut-admin (port 8081)
+ │                         ▼
+ ├── vm/nut-vm.sh   VM (Ubuntu 24.04 minimal)
+ │   ├── Downloads        │   ├── NUT Server
+ │   ├── virt-customize ─►│   │   ├── nut-driver (usbhid-ups)
+ │   ├── Creates VM       │   │   ├── upsd (port 3493)
+ │   ├── Detects UPS      │   │   ├── upsmon (with notifycmd hooks)
+ │   └── Configures       │   └── nut-admin (port 8081)
        (offline disk          └── cloud-init (network, resize)
         modification)
 ```
