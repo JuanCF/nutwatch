@@ -1,10 +1,18 @@
 from flask import Blueprint, request, jsonify
 
 from auth import require_admin
-from services.hooks import get_hook, put_hook, delete_hook
+from services.hooks import get_hook, put_hook, delete_hook, list_hooks
 from config import IDENTIFIER_REGEX
 
 hooks_bp = Blueprint("hooks", __name__)
+
+
+@hooks_bp.route("/api/hooks/<upsname>", methods=["GET"])
+@require_admin
+def list_hooks_handler(upsname):
+    if not IDENTIFIER_REGEX.match(upsname):
+        return jsonify({"error": "invalid ups name"}), 400
+    return jsonify({"hooks": list_hooks(upsname)})
 
 
 @hooks_bp.route("/api/hooks/<upsname>/<event>", methods=["GET"])

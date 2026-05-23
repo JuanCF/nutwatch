@@ -796,15 +796,16 @@ function closeHooksSection() {
 async function loadHooksTable(upsname) {
   const tbody = $('hooks-body');
   tbody.innerHTML = '';
+  let hookEvents = [];
+  try {
+    const r = await api('/hooks/' + encodeURIComponent(upsname));
+    hookEvents = r.hooks || [];
+  } catch(e) {
+    hookEvents = [];
+  }
   for (const evt of NOTIFICATION_EVENTS) {
     const tr = document.createElement('tr');
-    let hasHook = false;
-    try {
-      const r = await api('/hooks/' + encodeURIComponent(upsname) + '/' + evt);
-      hasHook = true;
-    } catch(e) {
-      hasHook = false;
-    }
+    const hasHook = hookEvents.includes(evt);
     tr.innerHTML =
       '<td>' + esc(evt) + '</td>' +
       '<td>' + (hasHook ? '<span class="badge online">yes</span>' : '<span class="badge unknown">no</span>') + '</td>' +

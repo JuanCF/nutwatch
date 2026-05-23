@@ -158,7 +158,7 @@ def serialize_upsmon_conf(data: dict) -> str:
             raise ValueError(f"Invalid notify_flag event name: {event!r}")
         flags = data["notify_flag"][event]
         if flags:
-            lines.append(f"NOTIFYFLAG {event} {' '.join(flags)}")
+            lines.append(f"NOTIFYFLAG {event} {'+'.join(flags)}")
 
     for tkey in TIMING_KEYS:
         if tkey in data.get("timing", {}):
