@@ -532,6 +532,7 @@ virt_customize_image() {
 MONITOR __UPS_NAME__@localhost:__LISTEN_PORT__ 1 __MONITOR_USER__ __MONITOR_PASS__ master
 
 MINSUPPLIES 1
+NOTIFYCMD "/etc/nut/notifycmd.sh"
 SHUTDOWNCMD "/sbin/shutdown -h +0"
 POLLFREQ 5
 POLLFREQALERT 5
@@ -546,9 +547,15 @@ NOTIFYMSG COMMOK    "Communications with UPS %s established"
 NOTIFYMSG COMMBAD   "Communications with UPS %s lost"
 NOTIFYMSG SHUTDOWN  "UPS %s forcing system shutdown"
 
-NOTIFYFLAG ONLINE   SYSLOG+WALL
-NOTIFYFLAG ONBATT   SYSLOG+WALL
-NOTIFYFLAG LOWBATT  SYSLOG+WALL
+NOTIFYFLAG ONLINE   SYSLOG+WALL+EXEC
+NOTIFYFLAG ONBATT   SYSLOG+WALL+EXEC
+NOTIFYFLAG LOWBATT  SYSLOG+WALL+EXEC
+NOTIFYFLAG COMMOK   SYSLOG+WALL+EXEC
+NOTIFYFLAG COMMBAD  SYSLOG+WALL+EXEC
+NOTIFYFLAG SHUTDOWN SYSLOG+WALL+EXEC
+NOTIFYFLAG REPLBATT SYSLOG+WALL+EXEC
+NOTIFYFLAG NOCOMM   SYSLOG+WALL+EXEC
+NOTIFYFLAG NOPARENT SYSLOG+WALL+EXEC
 RBWARNTIME 43200
 NOCOMMWARNTIME 300
 FINALDELAY 5
@@ -560,6 +567,16 @@ UPSMON_EOF
     -e "s/__MONITOR_USER__/$NUT_MONITOR_USER/g" \
     -e "s/__MONITOR_PASS__/$NUT_MONITOR_PASS/g" \
     "$tmp_dir/upsmon.conf"
+
+  cat >"$tmp_dir/notifycmd.sh" <<'NOTIFY_EOF'
+#!/bin/bash
+LOGFILE="/var/log/nut/notifycmd.log"
+HOOKDIR="/etc/nut/notify.d"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+UPSNAME_BARE="${UPSNAME%%@*}"
+echo "[$TIMESTAMP] UPS=$UPSNAME EVENT=$NOTIFYTYPE" >>"$LOGFILE"
+[[ -x "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" ]] && "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" >>"$LOGFILE" 2>&1
+NOTIFY_EOF
 
   #-----------------------------------------------------------------
   # Write nut-detect oneshot script + systemd service
@@ -633,6 +650,13 @@ SERVICE_EOF
   vc_cmd+=(--upload "$tmp_dir/nut-detect.sh:/usr/local/bin/nut-detect.sh")
   vc_cmd+=(--run-command "chmod +x /usr/local/bin/nut-detect.sh")
   vc_cmd+=(--upload "$tmp_dir/nut-detect.service:/etc/systemd/system/nut-detect.service")
+
+  # Upload notifycmd sample script
+  vc_cmd+=(--upload "$tmp_dir/notifycmd.sh:/etc/nut/notifycmd.sh")
+  vc_cmd+=(--run-command "chmod 750 /etc/nut/notifycmd.sh && chown root:nut /etc/nut/notifycmd.sh")
+  vc_cmd+=(--run-command "mkdir -p /etc/nut/notify.d /var/log/nut")
+  vc_cmd+=(--run-command "chown root:nut /etc/nut/notify.d && chmod 750 /etc/nut/notify.d")
+  vc_cmd+=(--run-command "chown nut:nut /var/log/nut")
 
   # Set permissions
   vc_cmd+=(--run-command 'chown root:nut /etc/nut/*.conf && chmod 640 /etc/nut/*.conf')

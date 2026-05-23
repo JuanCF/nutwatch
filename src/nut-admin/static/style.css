@@ -101,3 +101,17 @@ textarea {
 .config-buttons { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
 .empty { color: var(--muted); font-size: 0.9rem; }
 .confirm-modal p { margin: 0 0 1rem; line-height: 1.5; white-space: pre-wrap; font-family: var(--mono); font-size: 0.85rem; }
+.field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; }
+.field-grid .field { margin-bottom: 0; }
+.info-box { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; }
+.info-box p { margin: 0 0 0.5rem; }
+.info-box ul { margin: 0.25rem 0; padding-left: 1.25rem; }
+.info-box code { background: var(--bg); padding: 0.1rem 0.3rem; border-radius: 3px; font-family: var(--mono); font-size: 0.85rem; }
+.script-editor {
+  width: 100%; height: 280px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem;
+  font-family: var(--mono); font-size: 0.85rem; resize: vertical; tab-size: 2;
+}
+#hooks-table-wrap table { width: 100%; }
+#hooks-table-wrap td { vertical-align: middle; }
+#hooks-table-wrap .actions { margin-top: 0; }

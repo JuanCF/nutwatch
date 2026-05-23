@@ -15,7 +15,7 @@ build-tarball:
 		--exclude 'install.sh' \
 		__init__.py app.py auth.py config.py utils.py \
 		parsers/ services/ routes/ \
-		static/ \
+		static/ scripts/ \
 		nut-admin.service requirements.txt
 
 check: lint fmt lint-python test-python
