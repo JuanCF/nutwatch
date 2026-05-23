@@ -1,6 +1,4 @@
-import glob
 import os
-import re
 
 from config import NUT_DIR, IDENTIFIER_REGEX
 from parsers.ups_conf import parse_ups_conf, serialize_ups_conf
@@ -13,7 +11,7 @@ from parsers.monitor import (
     set_minsupplies,
 )
 from parsers.nut_scanner import parse_nut_scanner_output
-from utils import read_file, write_file, run_cmd, ups_status
+from utils import read_file, write_file, run_cmd, ups_status, stop_driver_and_cleanup
 
 DEFAULT_POLLINTERVAL = "5"
 
@@ -23,18 +21,6 @@ def _apply_recommended_defaults(entry: dict) -> None:
     if "pollinterval" not in directives:
         directives["pollinterval"] = DEFAULT_POLLINTERVAL
     entry["directives"] = [[k, v] for k, v in directives.items()]
-
-
-def _stop_driver_and_cleanup(name: str, driver: str = None) -> None:
-    run_cmd(["upsdrvctl", "stop", name], timeout=30)
-    for base in ("/var/run/nut", "/run/nut"):
-        for pid_file in glob.glob(os.path.join(base, f"*-{name}.pid")):
-            try:
-                os.unlink(pid_file)
-            except OSError:
-                pass
-    safe_name = re.escape(name)
-    run_cmd(["pkill", "-9", "-f", f".*-a\\s*{safe_name}"], timeout=5)
 
 
 def list_ups():
@@ -161,13 +147,7 @@ def delete_ups(name: str) -> bool:
     if len(new_entries) == len(entries):
         return False
 
-    driver = None
-    for e in entries:
-        if e["name"] == name:
-            driver = e.get("driver")
-            break
-
-    _stop_driver_and_cleanup(name, driver)
+    stop_driver_and_cleanup(name)
 
     write_file(path, serialize_ups_conf(new_entries))
     upsmon_path = os.path.join(NUT_DIR, "upsmon.conf")
