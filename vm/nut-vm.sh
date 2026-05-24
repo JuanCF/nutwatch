@@ -519,7 +519,7 @@ virt_customize_image() {
   #-----------------------------------------------------------------
   printf 'MODE=netserver\n' >"$tmp_dir/nut.conf"
 
-  printf '[%s]\n  driver = %s\n  port = auto\n  desc = "%s"\n  pollinterval = 2\n' \
+  printf '[%s]\n  driver = %s\n  port = auto\n  desc = "%s"\n  pollinterval = 5\n  pollonly = 1\n' \
     "$NUT_UPS_NAME" "$NUT_DRIVER" "$NUT_UPS_DESC" >"$tmp_dir/ups.conf"
 
   printf 'LISTEN %s %s\nMAXAGE 15\nSTATEPATH /var/run/nut\n' \
@@ -596,13 +596,15 @@ PRODUCTID=$(awk -F'"' '/productid/ {print $2; exit}' /tmp/nut-scan.txt)
   [[ -n "$VENDORID" ]] && printf "  vendorid = %s\n" "$VENDORID"
   [[ -n "$PRODUCTID" ]] && printf "  productid = %s\n" "$PRODUCTID"
   printf "  desc = \"%s\"\n" "__UPS_DESC__"
-  printf "  pollinterval = 2\n"
+  printf "  pollinterval = 5\n"
+  printf "  pollonly = 1\n"
 } > /etc/nut/ups.conf
 
 chown root:nut /etc/nut/ups.conf
 chmod 640 /etc/nut/ups.conf
 systemctl restart nut-driver nut-server nut-monitor
 touch /var/lib/nut/driver-detected
+systemctl reboot
 DETECT_EOF
 
   sed -i \

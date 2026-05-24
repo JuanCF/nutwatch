@@ -60,11 +60,89 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') { dismissDialog(false); e.preventDefault(); }
 });
 
+function toggleSidebar() {
+  document.getElementById('app').classList.toggle('sidebar-open');
+}
+
+const _pageTitles = {
+  dashboard: 'Dashboard',
+  ups: 'UPS Devices',
+  users: 'Users',
+  notifications: 'Notifications',
+  logs: 'Logs',
+  config: 'Config Files',
+  hooks: 'Hooks'
+};
+
+async function loadDashboard() {
+  // UPS summary
+  try {
+    const upsList = await api('/ups');
+    $('dash-ups-count').textContent = upsList.length;
+    const upsHtml = upsList.map(u =>
+      '<div class="dash-ups-item">' +
+        '<span class="dash-ups-name">' + esc(u.name) + '</span>' +
+        badge(u.status) +
+      '</div>'
+    ).join('');
+    $('dash-ups-list').innerHTML = upsHtml || '<div class="empty">No UPS devices configured.</div>';
+  } catch(e) {
+    $('dash-ups-count').textContent = '?';
+    $('dash-ups-list').innerHTML = '<div class="empty">Failed to load UPS data</div>';
+  }
+
+  // Users
+  try {
+    const users = await api('/users');
+    $('dash-user-count').textContent = users.length;
+  } catch(e) {
+    $('dash-user-count').textContent = '?';
+  }
+
+  // Services
+  try {
+    const svcs = await api('/service/status-detailed');
+    const svcNames = Object.keys(svcs);
+    const activeCount = svcNames.filter(s => svcs[s].active).length;
+    $('dash-svc-count').textContent = activeCount + '/' + svcNames.length;
+
+    // Health: drivers are optional (NUT 2.8+ uses nut-driver-enumerator / nut-driver@ wrappers)
+    const optionalPattern = /^nut-driver/;
+    const coreServices = svcNames.filter(n => !optionalPattern.test(n));
+    const coreActive = coreServices.filter(s => svcs[s].active).length;
+    const hasFailed = svcNames.some(s => svcs[s].state === 'failed');
+
+    let health, healthClass;
+    if (hasFailed) { health = 'Failed'; healthClass = 'health-failed'; }
+    else if (coreServices.length === 0) { health = 'Unknown'; healthClass = 'health-unknown'; }
+    else if (coreActive === coreServices.length) { health = 'Healthy'; healthClass = 'health-healthy'; }
+    else { health = 'Degraded'; healthClass = 'health-degraded'; }
+
+    $('dash-health').innerHTML = '<span class="' + healthClass + '">' + health + '</span>';
+
+    let svcHtml = '';
+    for (const [svc, info] of Object.entries(svcs)) {
+      const cls = info.active ? 'online' : (info.state === 'failed' ? 'offline' : 'unknown');
+      svcHtml += '<div class="dash-svc-item"><span class="badge ' + cls + '">' + esc(svc) + '</span><span class="dash-svc-state">' + esc(info.state) + '</span></div>';
+    }
+    $('dash-svc-list').innerHTML = svcHtml;
+  } catch(e) {
+    $('dash-svc-count').textContent = '?';
+    $('dash-health').textContent = 'Unknown';
+    $('dash-svc-list').innerHTML = '<div class="empty">Status unavailable</div>';
+  }
+}
+
 function showSection(id, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   $('sec-' + id).classList.add('active');
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
+  const titleEl = $('page-title');
+  if (titleEl && _pageTitles[id]) titleEl.textContent = _pageTitles[id];
+  // Close sidebar on mobile after navigation
+  document.getElementById('app').classList.remove('sidebar-open');
+  if (id === 'dashboard') loadDashboard();
   if (id === 'logs' && !es) startLogStream();
   if (id === 'notifications') loadNotifications();
 }
@@ -880,6 +958,7 @@ async function deleteHook(upsname, event) {
   }
 }
 
+loadDashboard();
 loadUps();
 loadUsers();
 loadNotifications();
