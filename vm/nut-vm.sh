@@ -604,7 +604,6 @@ chown root:nut /etc/nut/ups.conf
 chmod 640 /etc/nut/ups.conf
 systemctl restart nut-driver nut-server nut-monitor
 touch /var/lib/nut/driver-detected
-systemctl reboot
 DETECT_EOF
 
   sed -i \

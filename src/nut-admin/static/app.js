@@ -865,10 +865,8 @@ function openHooksSection(upsname) {
 }
 
 function closeHooksSection() {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  $('sec-ups').classList.add('active');
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  document.querySelector('nav button:first-child').classList.add('active');
+  const btn = document.querySelector('nav button[onclick*="showSection(\'ups\'"]');
+  showSection('ups', btn);
 }
 
 async function loadHooksTable(upsname) {
