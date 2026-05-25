@@ -981,12 +981,4 @@ textarea#config-editor {
   .card-grid {
     grid-template-columns: 1fr;
   }
-  
-  #users-table-wrap,
-  #hooks-table-wrap,
-  #notify-monitors-wrap,
-  #notify-events-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
 }

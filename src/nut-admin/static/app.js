@@ -61,7 +61,12 @@ document.addEventListener('keydown', function(e) {
 });
 
 function toggleSidebar() {
-  document.getElementById('app').classList.toggle('sidebar-open');
+  const app = document.getElementById('app');
+  app.classList.toggle('sidebar-open');
+  const overlay = document.querySelector('.sidebar-overlay');
+  if (overlay) {
+    overlay.setAttribute('aria-hidden', String(!app.classList.contains('sidebar-open')));
+  }
 }
 
 const _pageTitles = {
