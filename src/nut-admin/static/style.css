@@ -82,11 +82,26 @@ html, body {
   flex-shrink: 0;
 }
 
+.brand-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
 .brand-text {
   font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text);
+  line-height: 1.2;
+}
+
+.brand-version {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
 }
 
 .sidebar-nav {
@@ -197,6 +212,7 @@ html, body {
   flex: 1;
   max-width: none;
   margin: 0;
+  min-width: 0;
 }
 
 /* ─── Typography ─── */
@@ -868,6 +884,29 @@ textarea#config-editor {
   font-size: 0.8rem;
 }
 
+/* ─── Table wrappers for responsive scrolling ─── */
+#users-table-wrap,
+#hooks-table-wrap,
+#notify-monitors-wrap,
+#notify-events-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-lg);
+  max-width: 100%;
+}
+
+/* Ensure inputs inside tables shrink on small screens */
+#notify-monitors-table input:not([type="checkbox"]),
+#notify-monitors-table select,
+#notify-events-table input:not([type="checkbox"]) {
+  width: 100%;
+  min-width: 0;
+}
+
+#notify-events-table td {
+  white-space: nowrap;
+}
+
 /* ─── Animations ─── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
@@ -883,6 +922,11 @@ textarea#config-editor {
   display: block;
 }
 
+/* ─── Sidebar Overlay (mobile only) ─── */
+.sidebar-overlay {
+  display: none;
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   .sidebar {
@@ -892,6 +936,22 @@ textarea#config-editor {
   
   .app.sidebar-open .sidebar {
     transform: translateX(0);
+  }
+  
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+  
+  .app.sidebar-open .sidebar-overlay {
+    opacity: 1;
+    pointer-events: auto;
   }
   
   .main {
@@ -920,11 +980,5 @@ textarea#config-editor {
   
   .card-grid {
     grid-template-columns: 1fr;
-  }
-  
-  table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
   }
 }

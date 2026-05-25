@@ -11,7 +11,10 @@
 <aside class="sidebar">
   <div class="sidebar-brand">
     <div class="brand-dot"></div>
-    <span class="brand-text">NUT Admin</span>
+    <div class="brand-title">
+      <span class="brand-text">NUT Admin</span>
+      <span class="brand-version">v1.0.0</span>
+    </div>
   </div>
   <nav class="sidebar-nav">
     <button class="active" onclick="showSection('dashboard', this)">
@@ -40,6 +43,8 @@
     </button>
   </nav>
 </aside>
+
+<div class="sidebar-overlay" onclick="toggleSidebar()" aria-hidden="true" aria-label="Close menu"></div>
 
 <main class="main">
   <div class="main-header">
