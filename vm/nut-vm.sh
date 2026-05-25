@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright (c) 2021-2026 community-scripts ORG
+# Author: JuanCF (https://github.com/JuanCF)
+# License: MIT | https://github.com/community-scripts/ProxmoxVED/raw/main/LICENSE
+# Source: https://github.com/JuanCF/proxmox-nut-server
 #
 # vm/nut-vm.sh - Proxmox NUT Server VM Setup Script
 #
@@ -263,7 +267,7 @@ check_dependencies() {
 check_virt_customize() {
   if ! command -v virt-customize &>/dev/null; then
     msg_info "virt-customize not found, installing libguestfs-tools..."
-    if ! apt-get update -qq >/dev/null 2>&1 || ! apt-get install -y -qq libguestfs-tools >/dev/null 2>&1; then
+    if ! apt update -qq >/dev/null 2>&1 || ! apt install -y -qq libguestfs-tools >/dev/null 2>&1; then
       msg_error "Failed to install libguestfs-tools"
     fi
   fi
@@ -273,7 +277,7 @@ check_virt_customize() {
   if [[ "$debian_version" == "13" ]] || [[ "$debian_version" == "trixie" ]] || [[ "$debian_version" == "13."* ]]; then
     if ! dpkg -l | grep -q "^ii  dhcpcd-base "; then
       msg_info "Installing dhcpcd-base for virt-customize network support on Debian 13..."
-      if ! apt-get install -y -qq dhcpcd-base >/dev/null 2>&1; then
+      if ! apt install -y -qq dhcpcd-base >/dev/null 2>&1; then
         msg_warn "Failed to install dhcpcd-base — virt-customize network commands may fail"
       fi
     fi
@@ -638,7 +642,7 @@ SERVICE_EOF
 
   # Update packages
   vc_cmd+=(--update)
-  vc_cmd+=(--run-command "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq")
+  vc_cmd+=(--run-command "DEBIAN_FRONTEND=noninteractive apt upgrade -y -qq")
 
   # Upload NUT configs
   vc_cmd+=(--upload "$tmp_dir/nut.conf:/etc/nut/nut.conf")
