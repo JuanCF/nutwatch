@@ -647,7 +647,9 @@ async function loadNotifications() {
       });
     }
     html += '</tbody></table></div>';
+    html += '<div class="toolbar" style="margin-top:0.75rem;">';
     html += '<button class="secondary" onclick="addMonitorRow()">Add Monitor</button>';
+    html += '</div>';
 
     // Global commands
     html += '<h3>Global Commands</h3>';
@@ -666,6 +668,7 @@ async function loadNotifications() {
 
     // Notification messages & flags
     html += '<h3>Notification Messages &amp; Flags</h3>';
+    html += '<div id="notify-events-wrap">';
     html += '<table id="notify-events-table"><thead><tr><th>Event</th><th>Message</th><th>SYSLOG</th><th>WALL</th><th>EXEC</th><th>IGNORE</th></tr></thead><tbody>';
     NOTIFICATION_EVENTS.forEach(evt => {
       const msg = (cfg.notify_msg && cfg.notify_msg[evt]) || '';
@@ -680,6 +683,7 @@ async function loadNotifications() {
       html += '</tr>';
     });
     html += '</tbody></table>';
+    html += '</div>';
 
     // Hook info box
     html += '<div class="info-box" style="margin-top:1rem;font-size:0.9rem;">';
