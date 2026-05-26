@@ -9,12 +9,14 @@ corresponding `install/` counterpart.
 | Aspect | CT script (`ct/`) | VM script (`vm/`) |
 | --- | --- | --- |
 | Command set | `pct` | `qm` |
-| Sourced helpers | `build.func` | `build.func` + `cloud-init.func` |
+| Sourced helpers | `build.func` | `api.func` + `vm-core.func` + `cloud-init.func` |
 | Second script | `install/AppName-install.sh` | none |
 | Version tracking | `/opt/${APP}_version.txt` | not used |
 | Update handling | `update_script()` mandatory | omit unless genuinely needed |
 | First-boot config | runs install script inside LXC | cloud-init or pre-baked image |
 | Unprivileged flag | `var_unprivileged` matters | irrelevant |
+| API integration | optional | `post_to_api_vm` + `post_update_to_api` |
+| Entry point | `main()` function | standard inline entry point |
 
 ## Naming conventions
 
@@ -23,6 +25,68 @@ corresponding `install/` counterpart.
 | `vm/AppName-vm.sh` | Specific application | `haos-vm.sh`, `opnsense-vm.sh` |
 | `vm/distro-vm.sh` | Generic base OS | `debian-vm.sh`, `ubuntu2404-vm.sh` |
 | `vm/pimox-*.sh` | ARM64 (PiMox) variant | `pimox-haos-vm.sh` |
+
+## Standard sourced helpers
+
+All VM scripts source three helpers from `community-scripts/ProxmoxVED`:
+
+```bash
+COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://git.community-scripts.org/community-scripts/ProxmoxVED/raw/branch/main}"
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/api.func")"
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/vm-core.func")"
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/cloud-init.func")"
+
+load_api_functions
+color
+formatting
+icons
+default_vars
+set_std_mode
+shell_check
+```
+
+Then call the standard entry-point helpers in order:
+
+```bash
+check_root          # from vm-core.func
+pve_check           # from vm-core.func
+ssh_check           # from vm-core.func
+start_script        # local: default_settings or advanced_settings
+post_to_api_vm      # from api.func
+```
+
+### Standard entry-point functions (local)
+
+```bash
+function default_settings() {
+  VMID=$(get_valid_nextid)
+  HN="app-server"
+  BRG="vmbr0"
+  RAM_SIZE="1024"
+  CORE_COUNT="1"
+  DISK_SIZE="8"
+  # ... app-specific defaults ...
+  START_VM="yes"
+  METHOD="default"
+}
+
+function advanced_settings() {
+  METHOD="advanced"
+  # ... interactive prompts ...
+}
+
+function start_script() {
+  whiptail ... --yesno "Use Default Settings?" ...
+  local rc=$?
+  if [ $rc -eq 0 ]; then
+    default_settings
+  elif [ $rc -eq 1 ]; then
+    advanced_settings
+  else
+    msg_error "Cancelled by user"; exit
+  fi
+}
+```
 
 ## Two categories of VM scripts
 
@@ -59,6 +123,26 @@ added after first boot, Ansible, or manual setup).
 - Always allocate an EFI disk when using OVMF.
 - Remove or detach the ISO after installation completes so the VM boots from the
   installed disk on subsequent starts.
+
+## API integration
+
+All VM scripts report status to the community-scripts API:
+
+```bash
+post_to_api_vm        # after start_script, before creation begins
+post_update_to_api "done" "none"    # on successful completion
+post_update_to_api "failed" "..."   # on error (in ERR trap or explicit)
+```
+
+Traps must be set early, before any creation work:
+
+```bash
+set -e
+trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
+trap cleanup EXIT
+trap 'post_update_to_api "failed" "INTERRUPTED"; exit 130' SIGINT
+trap 'post_update_to_api "failed" "TERMINATED"; exit 143' SIGTERM
+```
 
 ## Functions in `misc/cloud-init.func`
 
@@ -237,6 +321,34 @@ RELEASE=$(curl -fsSL https://api.github.com/repos/USER/REPO/releases/latest \
 URL="https://github.com/USER/REPO/releases/download/${RELEASE}/image-${RELEASE}.img"
 ```
 
+### Storage selection (standard radiolist)
+
+```bash
+msg_info "Validating Storage"
+while read -r line; do
+  TAG=$(echo "$line" | awk '{print $1}')
+  TYPE=$(echo "$line" | awk '{printf "%-10s", $2}')
+  FREE=$(echo "$line" | numfmt --field 4-6 --from-unit=K --to=iec --format %.2f | awk '{printf( "%9sB", $6)}')
+  ITEM="  Type: $TYPE Free: $FREE "
+  OFFSET=2
+  if [[ $(( ${#ITEM} + OFFSET )) -gt ${MSG_MAX_LENGTH:-} ]]; then
+    MSG_MAX_LENGTH=$(( ${#ITEM} + OFFSET ))
+  fi
+  STORAGE_MENU+=("$TAG" "$ITEM" "OFF")
+done < <(pvesm status -content images | awk 'NR>1')
+VALID=$(pvesm status -content images | awk 'NR>1')
+if [ -z "$VALID" ]; then
+  msg_error "Unable to detect a valid storage location."; exit
+elif [ $(( ${#STORAGE_MENU[@]} / 3 )) -eq 1 ]; then
+  STORAGE=${STORAGE_MENU[0]}
+else
+  while [ -z "${STORAGE:+x}" ]; do
+    STORAGE=$(whiptail ... --radiolist ... "${STORAGE_MENU[@]}" 3>&1 1>&2 2>&3) \
+      || { msg_error "Cancelled by user"; exit; }
+  done
+fi
+```
+
 ### Storage-type disk naming
 
 The disk name and import format depend on the storage backend.
@@ -245,16 +357,16 @@ The disk name and import format depend on the storage backend.
 STORAGE_TYPE=$(pvesm status -storage "$STORAGE" | awk 'NR>1 {print $2}')
 case $STORAGE_TYPE in
   nfs | dir | cifs)
-    DISK_EXT=".qcow2"; DISK_REF="$VMID/"; DISK_IMPORT="-format qcow2"; THIN="";;
+    DISK_EXT=".qcow2"; DISK_REF_PREFIX="${VMID}/"; DISK_IMPORT=(--format qcow2);;
   btrfs)
-    DISK_EXT=".raw";   DISK_REF="$VMID/"; DISK_IMPORT="-format raw";   THIN="";;
+    DISK_EXT=".raw";   DISK_REF_PREFIX="${VMID}/"; DISK_IMPORT=(--format raw);;
   *)
-    DISK_EXT="";       DISK_REF="";        DISK_IMPORT="-format raw";;
+    DISK_EXT="";       DISK_REF_PREFIX="";        DISK_IMPORT=(--format raw);;
 esac
 for i in {0,1}; do
   disk="DISK$i"
-  eval DISK${i}=vm-${VMID}-disk-${i}${DISK_EXT:-}
-  eval DISK${i}_REF=${STORAGE}:${DISK_REF:-}${!disk}
+  eval "DISK${i}=vm-${VMID}-disk-${i}${DISK_EXT:-}"
+  eval "DISK${i}_REF=${STORAGE}:${DISK_REF_PREFIX:-}${!disk}"
 done
 ```
 

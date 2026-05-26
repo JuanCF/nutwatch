@@ -37,7 +37,7 @@ source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/api.func")"
 # shellcheck disable=SC1090,SC2046
 source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/vm-core.func")"
 # shellcheck disable=SC1090,SC2046
-source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/cloud-init.func")" || true
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/cloud-init.func")"
 
 load_api_functions
 color
@@ -52,8 +52,8 @@ WORK_FILE=""
 set -e
 trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
 trap cleanup EXIT
-trap 'post_update_to_api "failed" "INTERRUPTED"' SIGINT
-trap 'post_update_to_api "failed" "TERMINATED"' SIGTERM
+trap 'post_update_to_api "failed" "INTERRUPTED"; exit 130' SIGINT
+trap 'post_update_to_api "failed" "TERMINATED"; exit 143' SIGTERM
 
 TEMP_DIR=$(mktemp -d)
 pushd "$TEMP_DIR" >/dev/null
@@ -133,14 +133,19 @@ function advanced_settings() {
 }
 
 function start_script() {
-  if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "SETTINGS" --yesno "Use Default Settings?" --no-button Advanced 10 58); then
+  whiptail --backtitle "Proxmox VE Helper Scripts" --title "SETTINGS" --yesno "Use Default Settings?" --no-button Advanced 10 58
+  local rc=$?
+  if [ $rc -eq 0 ]; then
     header_info
     echo -e "${BL}Using Default Settings${CL}"
     default_settings
-  else
+  elif [ $rc -eq 1 ]; then
     header_info
     echo -e "${RD}Using Advanced Settings${CL}"
     advanced_settings
+  else
+    msg_error "Cancelled by user"
+    exit
   fi
 }
 
@@ -1146,7 +1151,10 @@ else
     STORAGE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Storage Pools" --radiolist \
       "Which storage pool would you like to use for ${HN}?\nTo make a selection, use the Spacebar.\n" \
       16 $((MSG_MAX_LENGTH + 23)) 6 \
-      "${STORAGE_MENU[@]}" 3>&1 1>&2 2>&3)
+      "${STORAGE_MENU[@]}" 3>&1 1>&2 2>&3) || {
+      msg_error "Cancelled by user"
+      exit
+    }
   done
 fi
 msg_ok "Using ${CL}${BL}$STORAGE${CL} ${GN}for Storage Location."
