@@ -19,8 +19,6 @@ NSAPP="nut-vm"
 var_os="ubuntu"
 var_version="24.04"
 
-GEN_MAC=02:$(openssl rand -hex 5 | awk '{print toupper($0)}' | sed 's/\(..\)/\1:/g; s/.$//')
-RANDOM_UUID="$(cat /proc/sys/kernel/random/uuid)"
 METHOD=""
 DISK_SIZE="8"
 
@@ -75,12 +73,6 @@ function ssh_check() {
       fi
     fi
   fi
-}
-
-function exit-script() {
-  clear
-  echo -e "${CROSS}${RD}User exited script${CL}\n"
-  exit
 }
 
 function default_settings() {
@@ -321,22 +313,6 @@ prompt_integer() {
 # Section 3: Prerequisite Checks
 #===============================================================================
 
-check_proxmox() {
-  local missing=()
-
-  for cmd in qm pvesh pveversion pvesm python3; do
-    if ! command -v "$cmd" &>/dev/null; then
-      missing+=("$cmd")
-    fi
-  done
-
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    msg_error "Missing Proxmox commands: ${missing[*]}"
-    exit
-  fi
-  msg_ok "Proxmox VE environment detected"
-}
-
 check_dependencies() {
   local missing=()
 
@@ -406,9 +382,6 @@ validate_bridge() {
 #===============================================================================
 
 collect_vm_config() {
-  local storage_pools=()
-  local storage_count=0
-
   VMID=$(get_valid_nextid)
   prompt_integer VMID "VM ID" "$VMID" 100 999999999
 
@@ -472,21 +445,18 @@ determine_storage_type() {
     DISK_EXT=".qcow2"
     DISK_REF_PREFIX="${VMID}/"
     DISK_IMPORT=(--format qcow2)
-    THIN=""
     FORMAT=",efitype=4m"
     ;;
   btrfs)
     DISK_EXT=".raw"
     DISK_REF_PREFIX="${VMID}/"
     DISK_IMPORT=(--format raw)
-    THIN=""
     FORMAT=",efitype=4m"
     ;;
   *)
     DISK_EXT=""
     DISK_REF_PREFIX=""
     DISK_IMPORT=(--format raw)
-    THIN="discard=on,ssd=1,"
     FORMAT=",efitype=4m"
     ;;
   esac
