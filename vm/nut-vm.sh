@@ -13,10 +13,16 @@
 #
 # Must be run as root on a Proxmox host.
 
+# These variables are consumed by api.func / vm-core.func
+# shellcheck disable=SC2034
 APP="NUT VM"
+# shellcheck disable=SC2034
 APP_TYPE="vm"
+# shellcheck disable=SC2034
 NSAPP="nut-vm"
+# shellcheck disable=SC2034
 var_os="ubuntu"
+# shellcheck disable=SC2034
 var_version="24.04"
 
 METHOD=""
@@ -26,12 +32,12 @@ DISK_SIZE="8"
 # shellcheck disable=SC1090
 COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://git.community-scripts.org/community-scripts/ProxmoxVED/raw/branch/main}"
 
-# shellcheck disable=SC1090
-source /dev/stdin <<<$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/api.func")
-# shellcheck disable=SC1090
-source /dev/stdin <<<$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/vm-core.func")
-# shellcheck disable=SC1090
-source /dev/stdin <<<$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/cloud-init.func") || true
+# shellcheck disable=SC1090,SC2046
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/api.func")"
+# shellcheck disable=SC1090,SC2046
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/vm-core.func")"
+# shellcheck disable=SC1090,SC2046
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/cloud-init.func")" || true
 
 load_api_functions
 color
@@ -50,7 +56,7 @@ trap 'post_update_to_api "failed" "INTERRUPTED"' SIGINT
 trap 'post_update_to_api "failed" "TERMINATED"' SIGTERM
 
 TEMP_DIR=$(mktemp -d)
-pushd $TEMP_DIR >/dev/null
+pushd "$TEMP_DIR" >/dev/null
 
 function pve_check() {
   if ! pveversion | grep -Eq "pve-manager/(8\.[1-4]|9\.[0-2])(\.[0-9]+)*"; then
@@ -93,7 +99,9 @@ function default_settings() {
   NUT_MONITOR_PASS=""
   NUT_LISTEN_ADDR="0.0.0.0"
   NUT_LISTEN_PORT="3493"
+  # shellcheck disable=SC2034
   START_VM="yes"
+  # shellcheck disable=SC2034
   METHOD="default"
   AUTO_GENERATE_PASSWORDS=true
   VM_PASSWORD=$(generate_password 16)
@@ -211,7 +219,10 @@ prompt_default() {
     --title "$title" \
     --inputbox "$prompt_text" \
     8 58 "$default_value" \
-    3>&1 1>&2 2>&3) || { msg_error "Cancelled by user"; exit; }
+    3>&1 1>&2 2>&3) || {
+    msg_error "Cancelled by user"
+    exit
+  }
 
   printf -v "$varname" '%s' "${result:-$default_value}"
 }
@@ -234,13 +245,19 @@ prompt_password() {
       --title "PASSWORD" \
       --passwordbox "$prompt_text" \
       8 58 \
-      3>&1 1>&2 2>&3) || { msg_error "Cancelled by user"; exit; }
+      3>&1 1>&2 2>&3) || {
+      msg_error "Cancelled by user"
+      exit
+    }
 
     pass2=$(whiptail --backtitle "Proxmox VE Helper Scripts" \
       --title "PASSWORD" \
       --passwordbox "Confirm: $prompt_text" \
       8 58 \
-      3>&1 1>&2 2>&3) || { msg_error "Cancelled by user"; exit; }
+      3>&1 1>&2 2>&3) || {
+      msg_error "Cancelled by user"
+      exit
+    }
 
     if [[ "$pass1" == "$pass2" ]]; then
       printf -v "$varname" '%s' "$pass1"
@@ -278,7 +295,10 @@ prompt_menu() {
     --title "$title" \
     --menu "Select an option:" 16 70 "${#items[@]}" \
     "${menu_items[@]}" \
-    3>&1 1>&2 2>&3) || { msg_error "Cancelled by user"; exit; }
+    3>&1 1>&2 2>&3) || {
+    msg_error "Cancelled by user"
+    exit
+  }
 
   printf -v "$varname" '%s' "$((choice - 1))"
 }
@@ -296,7 +316,10 @@ prompt_integer() {
       --title "INPUT" \
       --inputbox "$prompt_text (${min}-${max}):" \
       8 58 "$default_value" \
-      3>&1 1>&2 2>&3) || { msg_error "Cancelled by user"; exit; }
+      3>&1 1>&2 2>&3) || {
+      msg_error "Cancelled by user"
+      exit
+    }
 
     input="${input:-$default_value}"
     if [[ "$input" =~ ^[0-9]+$ ]] && ((input >= min && input <= max)); then
@@ -462,8 +485,8 @@ determine_storage_type() {
   esac
   for i in {0,1}; do
     disk="DISK$i"
-    eval DISK${i}=vm-${VMID}-disk-${i}${DISK_EXT:-}
-    eval DISK${i}_REF=${STORAGE}:${DISK_REF_PREFIX:-}${!disk}
+    eval "DISK${i}=vm-${VMID}-disk-${i}${DISK_EXT:-}"
+    eval "DISK${i}_REF=${STORAGE}:${DISK_REF_PREFIX:-}${!disk}"
   done
 }
 
@@ -794,7 +817,8 @@ create_vm() {
   setup_cloud_init "$VMID" "$STORAGE" "$HN" "yes" "$VM_USER"
   qm set "$VMID" --cipassword "$VM_PASSWORD" >/dev/null
 
-  DESCRIPTION=$(cat <<EOF
+  DESCRIPTION=$(
+    cat <<EOF
 <div align='center'>
   <a href='https://Helper-Scripts.com' target='_blank' rel='noopener noreferrer'>
     <img src='https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/images/logo-81x112.png' alt='Logo' style='width:81px;height:112px;'/>
@@ -822,7 +846,7 @@ create_vm() {
   </span>
 </div>
 EOF
-)
+  )
   qm set "$VMID" -description "$DESCRIPTION" >/dev/null
 
   msg_ok "VM configured"
@@ -1017,7 +1041,10 @@ except Exception:
   VM_IP=$(whiptail --backtitle "Proxmox VE Helper Scripts" \
     --title "VM IP ADDRESS" \
     --inputbox "Enter VM IP address manually:" \
-    8 58 "" 3>&1 1>&2 2>&3) || { msg_error "No IP address provided"; exit; }
+    8 58 "" 3>&1 1>&2 2>&3) || {
+    msg_error "No IP address provided"
+    exit
+  }
   if [[ -z "$VM_IP" ]]; then
     msg_error "No IP address provided"
     exit
@@ -1098,13 +1125,13 @@ post_to_api_vm
 
 msg_info "Validating Storage"
 while read -r line; do
-  TAG=$(echo $line | awk '{print $1}')
-  TYPE=$(echo $line | awk '{printf "%-10s", $2}')
-  FREE=$(echo $line | numfmt --field 4-6 --from-unit=K --to=iec --format %.2f | awk '{printf( "%9sB", $6)}')
+  TAG=$(echo "$line" | awk '{print $1}')
+  TYPE=$(echo "$line" | awk '{printf "%-10s", $2}')
+  FREE=$(echo "$line" | numfmt --field 4-6 --from-unit=K --to=iec --format %.2f | awk '{printf( "%9sB", $6)}')
   ITEM="  Type: $TYPE Free: $FREE "
   OFFSET=2
-  if [[ $((${#ITEM} + $OFFSET)) -gt ${MSG_MAX_LENGTH:-} ]]; then
-    MSG_MAX_LENGTH=$((${#ITEM} + $OFFSET))
+  if [[ $((${#ITEM} + OFFSET)) -gt ${MSG_MAX_LENGTH:-} ]]; then
+    MSG_MAX_LENGTH=$((${#ITEM} + OFFSET))
   fi
   STORAGE_MENU+=("$TAG" "$ITEM" "OFF")
 done < <(pvesm status -content images | awk 'NR>1')
@@ -1118,7 +1145,7 @@ else
   while [ -z "${STORAGE:+x}" ]; do
     STORAGE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Storage Pools" --radiolist \
       "Which storage pool would you like to use for ${HN}?\nTo make a selection, use the Spacebar.\n" \
-      16 $(($MSG_MAX_LENGTH + 23)) 6 \
+      16 $((MSG_MAX_LENGTH + 23)) 6 \
       "${STORAGE_MENU[@]}" 3>&1 1>&2 2>&3)
   done
 fi
