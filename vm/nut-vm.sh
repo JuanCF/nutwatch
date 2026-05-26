@@ -13,41 +13,140 @@
 #
 # Must be run as root on a Proxmox host.
 
-# Consumed by build.func via source on line 18 — shellcheck can’t follow non-constant sources.
+# These variables are consumed by api.func / vm-core.func
 # shellcheck disable=SC2034
 APP="NUT VM"
-var_tags="nut;vm;ups;network"
-var_cpu="1"
-var_ram="1024"
-var_disk="8"
+# shellcheck disable=SC2034
+APP_TYPE="vm"
+# shellcheck disable=SC2034
+NSAPP="nut-vm"
+# shellcheck disable=SC2034
 var_os="ubuntu"
+# shellcheck disable=SC2034
 var_version="24.04"
+
+METHOD=""
+DISK_SIZE="8"
 
 # These functions are fetched at runtime; shellcheck cannot statically analyze them.
 # shellcheck disable=SC1090
-source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVED/main/misc/build.func)
-# shellcheck disable=SC1090
-source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVED/main/misc/cloud-init.func)
+COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://git.community-scripts.org/community-scripts/ProxmoxVED/raw/branch/main}"
 
-SPINNER_PID=""
-SCRIPT_ERROR_LOG=()
+# shellcheck disable=SC1090,SC2046
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/api.func")"
+# shellcheck disable=SC1090,SC2046
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/vm-core.func")"
+# shellcheck disable=SC1090,SC2046
+source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/cloud-init.func")"
+
+load_api_functions
+color
+formatting
+icons
+default_vars
+set_std_mode
+shell_check
+
 WORK_FILE=""
-CLOUDINIT_SNIPPET=""
 
-# build.func's msg_error prints but does not call exit; override to add exit 1
-# so that check_root, check_proxmox, and whiptail cancellations abort the script.
-msg_error() {
-  [[ -n "${SPINNER_PID:-}" ]] && ps -p "${SPINNER_PID:-}" &>/dev/null && kill "${SPINNER_PID:-}"
-  printf "\e[?25h"
-  echo -e "${BFR}${CROSS}${RD}${1}${CL}"
-  SCRIPT_ERROR_LOG+=("[ERROR] $1")
-  SPINNER_PID=""
-  exit 1
+set -e
+trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
+trap cleanup EXIT
+trap 'post_update_to_api "failed" "INTERRUPTED"; exit 130' SIGINT
+trap 'post_update_to_api "failed" "TERMINATED"; exit 143' SIGTERM
+
+TEMP_DIR=$(mktemp -d)
+pushd "$TEMP_DIR" >/dev/null
+
+function pve_check() {
+  if ! pveversion | grep -Eq "pve-manager/(8\.[1-4]|9\.[0-2])(\.[0-9]+)*"; then
+    msg_error "This version of Proxmox Virtual Environment is not supported"
+    echo -e "Requires Proxmox Virtual Environment Version 8.1 - 8.4 or 9.0 - 9.2."
+    echo -e "Exiting..."
+    sleep 2
+    exit
+  fi
 }
 
-msg_warn() {
-  SCRIPT_ERROR_LOG+=("[WARN] $1")
-  echo -e "${BFR}${YW}${1}${CL}"
+function ssh_check() {
+  if command -v pveversion >/dev/null 2>&1; then
+    if [ -n "${SSH_CLIENT:+x}" ]; then
+      if whiptail --backtitle "Proxmox VE Helper Scripts" --defaultno --title "SSH DETECTED" --yesno "It's suggested to use the Proxmox shell instead of SSH, since SSH can create issues while gathering variables. Would you like to proceed with using SSH?" 10 62; then
+        echo "you've been warned"
+      else
+        clear
+        exit
+      fi
+    fi
+  fi
+}
+
+function default_settings() {
+  VMID=$(get_valid_nextid)
+  HN="nut-server"
+  BRG="vmbr0"
+  RAM_SIZE="1024"
+  CORE_COUNT="1"
+  DISK_SIZE="8"
+  VM_USER="ubuntu"
+  VM_PASSWORD=""
+  NUT_UPS_NAME="ups"
+  NUT_UPS_DESC="My UPS"
+  NUT_DRIVER="usbhid-ups"
+  NUT_ADMIN_USER="admin"
+  NUT_ADMIN_PASS=""
+  NUT_MONITOR_USER="monuser"
+  NUT_MONITOR_PASS=""
+  NUT_LISTEN_ADDR="0.0.0.0"
+  NUT_LISTEN_PORT="3493"
+  # shellcheck disable=SC2034
+  START_VM="yes"
+  # shellcheck disable=SC2034
+  METHOD="default"
+  AUTO_GENERATE_PASSWORDS=true
+  VM_PASSWORD=$(generate_password 16)
+  NUT_ADMIN_PASS=$(generate_password 16)
+  NUT_MONITOR_PASS=$(generate_password 16)
+  GENERATED_PASSWORDS+=("VM password: $VM_PASSWORD")
+  GENERATED_PASSWORDS+=("NUT admin password: $NUT_ADMIN_PASS")
+  GENERATED_PASSWORDS+=("NUT monitor password: $NUT_MONITOR_PASS")
+
+  echo -e "${DGN}Virtual Machine ID: ${BGN}${VMID}${CL}"
+  echo -e "${DGN}Hostname: ${BGN}${HN}${CL}"
+  echo -e "${DGN}Bridge: ${BGN}${BRG}${CL}"
+  echo -e "${DGN}CPU Cores: ${BGN}${CORE_COUNT}${CL}"
+  echo -e "${DGN}RAM Size: ${BGN}${RAM_SIZE}${CL}"
+  echo -e "${DGN}Disk Size: ${BGN}${DISK_SIZE}${CL}"
+  echo -e "${DGN}Start VM when completed: ${BGN}yes${CL}"
+  echo -e "${BL}Creating a NUT VM using the above default settings${CL}"
+}
+
+function advanced_settings() {
+  METHOD="advanced"
+  prompt_autogenerate_passwords
+  collect_vm_config
+  collect_nut_config
+  if ! prompt_yes_no "NUT Configuration:\n\n  UPS Name:     $NUT_UPS_NAME\n  UPS Desc:     $NUT_UPS_DESC\n  Driver:       $NUT_DRIVER\n  Admin User:   $NUT_ADMIN_USER\n  Monitor User: $NUT_MONITOR_USER\n  Listen:       $NUT_LISTEN_ADDR:$NUT_LISTEN_PORT\n\nProceed with VM and NUT setup?" "y" "NUT CONFIGURATION SUMMARY"; then
+    msg_error "Aborted by user"
+    exit
+  fi
+}
+
+function start_script() {
+  whiptail --backtitle "Proxmox VE Helper Scripts" --title "SETTINGS" --yesno "Use Default Settings?" --no-button Advanced 10 58
+  local rc=$?
+  if [ $rc -eq 0 ]; then
+    header_info
+    echo -e "${BL}Using Default Settings${CL}"
+    default_settings
+  elif [ $rc -eq 1 ]; then
+    header_info
+    echo -e "${RD}Using Advanced Settings${CL}"
+    advanced_settings
+  else
+    msg_error "Cancelled by user"
+    exit
+  fi
 }
 
 header_info() {
@@ -70,7 +169,7 @@ EOF
 readonly UBUNTU_IMG_URL="https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img"
 readonly UBUNTU_IMG_CHECKSUM_URL="https://cloud-images.ubuntu.com/minimal/releases/noble/release/SHA256SUMS"
 readonly UBUNTU_IMG_NAME="ubuntu-24.04-minimal-cloudimg-amd64.img"
-readonly IMG_CACHE_DIR="/var/lib/vz/template/iso"
+readonly IMG_CACHE_DIR="/var/lib/vz/template/cache"
 readonly NUT_DEFAULT_PORT=3493
 readonly SCRIPT_VERSION="1.0.0"
 readonly NUT_ADMIN_REF="${NUT_ADMIN_REF:-v1.0.0}"
@@ -125,7 +224,10 @@ prompt_default() {
     --title "$title" \
     --inputbox "$prompt_text" \
     8 58 "$default_value" \
-    3>&1 1>&2 2>&3) || msg_error "Cancelled by user"
+    3>&1 1>&2 2>&3) || {
+    msg_error "Cancelled by user"
+    exit
+  }
 
   printf -v "$varname" '%s' "${result:-$default_value}"
 }
@@ -148,13 +250,19 @@ prompt_password() {
       --title "PASSWORD" \
       --passwordbox "$prompt_text" \
       8 58 \
-      3>&1 1>&2 2>&3) || msg_error "Cancelled by user"
+      3>&1 1>&2 2>&3) || {
+      msg_error "Cancelled by user"
+      exit
+    }
 
     pass2=$(whiptail --backtitle "Proxmox VE Helper Scripts" \
       --title "PASSWORD" \
       --passwordbox "Confirm: $prompt_text" \
       8 58 \
-      3>&1 1>&2 2>&3) || msg_error "Cancelled by user"
+      3>&1 1>&2 2>&3) || {
+      msg_error "Cancelled by user"
+      exit
+    }
 
     if [[ "$pass1" == "$pass2" ]]; then
       printf -v "$varname" '%s' "$pass1"
@@ -192,7 +300,10 @@ prompt_menu() {
     --title "$title" \
     --menu "Select an option:" 16 70 "${#items[@]}" \
     "${menu_items[@]}" \
-    3>&1 1>&2 2>&3) || msg_error "Cancelled by user"
+    3>&1 1>&2 2>&3) || {
+    msg_error "Cancelled by user"
+    exit
+  }
 
   printf -v "$varname" '%s' "$((choice - 1))"
 }
@@ -210,7 +321,10 @@ prompt_integer() {
       --title "INPUT" \
       --inputbox "$prompt_text (${min}-${max}):" \
       8 58 "$default_value" \
-      3>&1 1>&2 2>&3) || msg_error "Cancelled by user"
+      3>&1 1>&2 2>&3) || {
+      msg_error "Cancelled by user"
+      exit
+    }
 
     input="${input:-$default_value}"
     if [[ "$input" =~ ^[0-9]+$ ]] && ((input >= min && input <= max)); then
@@ -227,28 +341,6 @@ prompt_integer() {
 # Section 3: Prerequisite Checks
 #===============================================================================
 
-check_root() {
-  if [[ $EUID -ne 0 ]]; then
-    msg_error "This script must be run as root"
-  fi
-  msg_ok "Running as root"
-}
-
-check_proxmox() {
-  local missing=()
-
-  for cmd in qm pvesh pveversion pvesm python3; do
-    if ! command -v "$cmd" &>/dev/null; then
-      missing+=("$cmd")
-    fi
-  done
-
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    msg_error "Missing Proxmox commands: ${missing[*]}"
-  fi
-  msg_ok "Proxmox VE environment detected"
-}
-
 check_dependencies() {
   local missing=()
 
@@ -260,6 +352,7 @@ check_dependencies() {
 
   if [[ ${#missing[@]} -gt 0 ]]; then
     msg_error "Missing required dependencies: ${missing[*]}"
+    exit
   fi
   msg_ok "Dependencies satisfied"
 }
@@ -267,8 +360,9 @@ check_dependencies() {
 check_virt_customize() {
   if ! command -v virt-customize &>/dev/null; then
     msg_info "virt-customize not found, installing libguestfs-tools..."
-    if ! apt update -qq >/dev/null 2>&1 || ! apt install -y -qq libguestfs-tools >/dev/null 2>&1; then
+    if ! $STD apt update -qq >/dev/null 2>&1 || ! $STD apt install -y -qq libguestfs-tools >/dev/null 2>&1; then
       msg_error "Failed to install libguestfs-tools"
+      exit
     fi
   fi
 
@@ -277,7 +371,7 @@ check_virt_customize() {
   if [[ "$debian_version" == "13" ]] || [[ "$debian_version" == "trixie" ]] || [[ "$debian_version" == "13."* ]]; then
     if ! dpkg -l | grep -q "^ii  dhcpcd-base "; then
       msg_info "Installing dhcpcd-base for virt-customize network support on Debian 13..."
-      if ! apt install -y -qq dhcpcd-base >/dev/null 2>&1; then
+      if ! $STD apt install -y -qq dhcpcd-base >/dev/null 2>&1; then
         msg_warn "Failed to install dhcpcd-base — virt-customize network commands may fail"
       fi
     fi
@@ -298,14 +392,6 @@ check_architecture() {
   msg_ok "Architecture: amd64"
 }
 
-get_next_vmid() {
-  pvesh get /cluster/nextid 2>/dev/null || echo "100"
-}
-
-list_storage_pools() {
-  pvesm status --content images 2>/dev/null | awk 'NR>1 {print $1}' | head -20
-}
-
 validate_vmid() {
   local vmid="$1"
   if qm list 2>/dev/null | grep -q "^[[:space:]]*${vmid}[[:space:]]"; then
@@ -324,53 +410,37 @@ validate_bridge() {
 #===============================================================================
 
 collect_vm_config() {
-  local storage_pools=()
-  local storage_count=0
+  VMID=$(get_valid_nextid)
+  prompt_integer VMID "VM ID" "$VMID" 100 999999999
 
-  VM_ID=$(get_next_vmid)
-  prompt_integer VM_ID "VM ID" "$VM_ID" 100 999999999
-
-  while ! validate_vmid "$VM_ID"; do
+  while ! validate_vmid "$VMID"; do
     whiptail --backtitle "Proxmox VE Helper Scripts" \
       --title "VM ID IN USE" \
-      --msgbox "VM ID $VM_ID is already in use. Please choose another." 8 58
-    prompt_integer VM_ID "VM ID" "$((VM_ID + 1))" 100 999999999
+      --msgbox "VM ID $VMID is already in use. Please choose another." 8 58
+    prompt_integer VMID "VM ID" "$((VMID + 1))" 100 999999999
   done
 
-  prompt_default VM_NAME "VM Hostname" "nut-server" "VM HOSTNAME"
+  prompt_default HN "VM Hostname" "nut-server" "VM HOSTNAME"
 
-  mapfile -t storage_pools < <(list_storage_pools)
-  storage_count=${#storage_pools[@]}
+  BRG="vmbr0"
+  prompt_default BRG "Network bridge" "$BRG" "NETWORK BRIDGE"
 
-  if [[ $storage_count -eq 0 ]]; then
-    msg_error "No storage pools found with 'images' content type"
-  elif [[ $storage_count -eq 1 ]]; then
-    VM_STORAGE="${storage_pools[0]}"
-    msg_ok "Using storage pool: $VM_STORAGE"
-  else
-    local storage_idx
-    prompt_menu storage_idx "SELECT STORAGE POOL" "${storage_pools[@]}"
-    VM_STORAGE="${storage_pools[$storage_idx]}"
-  fi
-
-  VM_BRIDGE="vmbr0"
-  prompt_default VM_BRIDGE "Network bridge" "$VM_BRIDGE" "NETWORK BRIDGE"
-
-  while ! validate_bridge "$VM_BRIDGE"; do
+  while ! validate_bridge "$BRG"; do
     whiptail --backtitle "Proxmox VE Helper Scripts" \
       --title "INVALID BRIDGE" \
-      --msgbox "Bridge '$VM_BRIDGE' does not exist. Please try again." 8 58
-    prompt_default VM_BRIDGE "Network bridge" "vmbr0" "NETWORK BRIDGE"
+      --msgbox "Bridge '$BRG' does not exist. Please try again." 8 58
+    prompt_default BRG "Network bridge" "vmbr0" "NETWORK BRIDGE"
   done
 
-  prompt_integer VM_RAM "RAM (MB)" "1024" 256 131072
-  prompt_integer VM_CORES "CPU cores" "1" 1 128
-  prompt_integer VM_DISK_GB "Disk size (GB)" "8" 4 10240
+  prompt_integer RAM_SIZE "RAM (MB)" "1024" 256 131072
+  prompt_integer CORE_COUNT "CPU cores" "1" 1 128
+  prompt_integer DISK_SIZE "Disk size (GB)" "8" 4 10240
   prompt_default VM_USER "VM username" "ubuntu" "VM USER"
   prompt_password VM_PASSWORD "VM password"
 
-  if ! prompt_yes_no "VM Configuration:\n\n  VM ID:     $VM_ID\n  Hostname:  $VM_NAME\n  Storage:   $VM_STORAGE\n  Bridge:    $VM_BRIDGE\n  RAM:       ${VM_RAM} MB\n  Cores:     $VM_CORES\n  Disk:      ${VM_DISK_GB} GB\n  Username:  $VM_USER\n\nProceed with VM creation?" "y" "VM CONFIGURATION SUMMARY"; then
+  if ! prompt_yes_no "VM Configuration:\n\n  VM ID:     $VMID\n  Hostname:  $HN\n  Bridge:    $BRG\n  RAM:       ${RAM_SIZE} MB\n  Cores:     $CORE_COUNT\n  Disk:      ${DISK_SIZE} GB\n  Username:  $VM_USER\n\nProceed with VM creation?" "y" "VM CONFIGURATION SUMMARY"; then
     msg_error "Aborted by user"
+    exit
   fi
 }
 
@@ -397,26 +467,32 @@ collect_nut_config() {
 #===============================================================================
 
 determine_storage_type() {
-  STORAGE_TYPE=$(pvesm status -storage "$VM_STORAGE" | awk 'NR>1 {print $2}')
+  STORAGE_TYPE=$(pvesm status -storage "$STORAGE" | awk 'NR>1 {print $2}')
   case $STORAGE_TYPE in
   nfs | dir | cifs)
     DISK_EXT=".qcow2"
-    DISK_REF_PREFIX="${VM_ID}/"
+    DISK_REF_PREFIX="${VMID}/"
     DISK_IMPORT=(--format qcow2)
+    FORMAT=",efitype=4m"
     ;;
   btrfs)
     DISK_EXT=".raw"
-    DISK_REF_PREFIX="${VM_ID}/"
+    DISK_REF_PREFIX="${VMID}/"
     DISK_IMPORT=(--format raw)
+    FORMAT=",efitype=4m"
     ;;
   *)
     DISK_EXT=""
     DISK_REF_PREFIX=""
     DISK_IMPORT=(--format raw)
+    FORMAT=",efitype=4m"
     ;;
   esac
-  DISK0="vm-${VM_ID}-disk-0${DISK_EXT}"
-  DISK0_REF="${VM_STORAGE}:${DISK_REF_PREFIX}${DISK0}"
+  for i in {0,1}; do
+    disk="DISK$i"
+    eval "DISK${i}=vm-${VMID}-disk-${i}${DISK_EXT:-}"
+    eval "DISK${i}_REF=${STORAGE}:${DISK_REF_PREFIX:-}${!disk}"
+  done
 }
 
 #===============================================================================
@@ -447,6 +523,7 @@ download_cloud_image() {
 
   if ! wget -q -c -O "${img_path}.tmp" "$UBUNTU_IMG_URL" 2>/dev/null; then
     msg_error "Failed to download cloud image"
+    exit
   fi
 
   mv "${img_path}.tmp" "$img_path"
@@ -456,50 +533,15 @@ download_cloud_image() {
   expected_sha=$(get_img_checksum)
   if [[ -z "$expected_sha" ]]; then
     msg_error "Could not fetch checksum for $UBUNTU_IMG_NAME"
+    exit
   fi
   if ! echo "${expected_sha}  ${img_path}" | sha256sum -c --status; then
     rm -f "$img_path"
     msg_error "SHA-256 checksum verification failed — image may be corrupt"
+    exit
   fi
 
   msg_ok "Downloaded and verified Ubuntu 24.04 cloud image"
-}
-
-generate_cloudinit_snippet() {
-  local snippet_path="/var/lib/vz/snippets/nut-vm-${VM_ID}-cloudinit.yaml"
-  CLOUDINIT_SNIPPET=""
-
-  local cfg_content
-  cfg_content=$(awk '$1 == "dir:" && $2 == "local" {f=1} f && /content/{print $2; exit}' /etc/pve/storage.cfg 2>/dev/null || echo "")
-  if [[ "$cfg_content" != *snippets* ]]; then
-    if [[ -n "$cfg_content" ]]; then
-      pvesm set local --content "${cfg_content},snippets" 2>/dev/null || true
-    else
-      pvesm set local --content "vztmpl,iso,backup,snippets" 2>/dev/null || true
-    fi
-    cfg_content=$(awk '$1 == "dir:" && $2 == "local" {f=1} f && /content/{print $2; exit}' /etc/pve/storage.cfg 2>/dev/null || echo "")
-    if [[ "$cfg_content" != *snippets* ]]; then
-      msg_warn "Could not enable snippets on local storage — vendor cloud-init snippet will be skipped"
-      msg_warn "VM IP detection may fall back to manual entry after boot"
-      return 0
-    fi
-  fi
-
-  mkdir -p "/var/lib/vz/snippets"
-
-  python3 -c "
-import sys
-with open(sys.argv[1], 'w') as f:
-    f.write('#cloud-config\n')
-    f.write('chpasswd:\n')
-    f.write('  list: |\n')
-    f.write('    ' + sys.argv[2] + ':' + sys.argv[3] + '\n')
-    f.write('  expire: False\n')
-" "$snippet_path" "$VM_USER" "$VM_PASSWORD"
-  chmod 600 "$snippet_path"
-
-  CLOUDINIT_SNIPPET="$snippet_path"
-  msg_ok "Generated cloud-init snippet"
 }
 
 #===============================================================================
@@ -508,7 +550,7 @@ with open(sys.argv[1], 'w') as f:
 
 virt_customize_image() {
   local img_path="$IMG_CACHE_DIR/$UBUNTU_IMG_NAME"
-  WORK_FILE="/tmp/nut-vm-${VM_ID}-work.img"
+  WORK_FILE="${TEMP_DIR}/nut-vm-${VMID}-work.img"
 
   msg_info "Preparing working disk image for virt-customize"
   cp -f "$img_path" "$WORK_FILE"
@@ -710,16 +752,17 @@ SERVICE_EOF
   ')
 
   # System bootstrap
-  vc_cmd+=(--hostname "$VM_NAME")
+  vc_cmd+=(--hostname "$HN")
   vc_cmd+=(--run-command 'rm -f /etc/machine-id && touch /etc/machine-id')
   vc_cmd+=(--run-command 'systemctl enable ssh')
 
-  local vcout="/tmp/nut-vm-${VM_ID}-virt-customize.log"
+  local vcout="/tmp/nut-vm-${VMID}-virt-customize.log"
   msg_info "Running virt-customize (this may take a few minutes)..."
   if ! "${vc_cmd[@]}" >"$vcout" 2>&1; then
     cat "$vcout"
     rm -f "$vcout" "$WORK_FILE"
     msg_error "virt-customize failed"
+    exit
   fi
   [[ "${VERBOSE:-}" == "yes" ]] && cat "$vcout"
   rm -f "$vcout"
@@ -732,27 +775,35 @@ SERVICE_EOF
 #===============================================================================
 
 create_vm() {
-  generate_cloudinit_snippet
   determine_storage_type
 
-  msg_info "Creating VM $VM_ID"
-  $STD qm create "$VM_ID" \
-    --name "$VM_NAME" \
-    --memory "$VM_RAM" \
-    --cores "$VM_CORES" \
-    --net0 "virtio,bridge=$VM_BRIDGE" \
-    --ostype l26 \
-    --agent enabled=1 \
-    --serial0 socket \
-    --vga serial0 \
-    --onboot 1 \
-    --tags 'community-script;nut;network;ups'
-  msg_ok "Created VM $VM_ID"
+  msg_info "Creating VM $VMID"
+  $STD qm create "$VMID" \
+    -agent 1 \
+    -tablet 0 \
+    -localtime 1 \
+    -bios ovmf \
+    -cores "$CORE_COUNT" \
+    -memory "$RAM_SIZE" \
+    -name "$HN" \
+    -tags 'community-script;nut;network;ups' \
+    -net0 "virtio,bridge=$BRG" \
+    -onboot 1 \
+    -ostype l26 \
+    -scsihw virtio-scsi-pci \
+    -serial0 socket \
+    -vga serial0
+  msg_ok "Created VM $VMID"
+
+  msg_info "Allocating EFI disk"
+  $STD pvesm alloc "$STORAGE" "$VMID" "$DISK0" 4M 1>&/dev/null
+  msg_ok "Allocated EFI disk"
 
   msg_info "Importing customized disk image"
   [[ "${VERBOSE:-}" == "yes" ]] && set -x
-  if ! $STD qm importdisk "$VM_ID" "$WORK_FILE" "$VM_STORAGE" "${DISK_IMPORT[@]}"; then
+  if ! $STD qm importdisk "$VMID" "$WORK_FILE" "$STORAGE" "${DISK_IMPORT[@]}"; then
     msg_error "Failed to import disk"
+    exit
   fi
   [[ "${VERBOSE:-}" == "yes" ]] && set +x
   rm -f "$WORK_FILE"
@@ -760,17 +811,48 @@ create_vm() {
   msg_ok "Imported disk image"
 
   msg_info "Configuring VM"
-  $STD qm set "$VM_ID" --scsihw virtio-scsi-pci
-  $STD qm set "$VM_ID" --scsi0 "${DISK0_REF}"
-  $STD qm resize "$VM_ID" scsi0 "${VM_DISK_GB}G"
-  $STD qm set "$VM_ID" --boot c --bootdisk scsi0
+  $STD qm set "$VMID" \
+    -efidisk0 "${DISK0_REF}${FORMAT}" \
+    -scsi0 "${DISK1_REF}" \
+    -boot order=scsi0
+  $STD qm resize "$VMID" scsi0 "${DISK_SIZE}G"
 
   # shellcheck disable=SC2034
   CLOUDINIT_SSH_KEYS=""
-  setup_cloud_init "$VM_ID" "$VM_STORAGE" "$VM_NAME" "yes" "$VM_USER"
-  if [[ -n "${CLOUDINIT_SNIPPET:-}" ]]; then
-    $STD qm set "$VM_ID" --cicustom "vendor=local:snippets/nut-vm-${VM_ID}-cloudinit.yaml"
-  fi
+  setup_cloud_init "$VMID" "$STORAGE" "$HN" "yes" "$VM_USER"
+  qm set "$VMID" --cipassword "$VM_PASSWORD" >/dev/null
+
+  DESCRIPTION=$(
+    cat <<EOF
+<div align='center'>
+  <a href='https://Helper-Scripts.com' target='_blank' rel='noopener noreferrer'>
+    <img src='https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/images/logo-81x112.png' alt='Logo' style='width:81px;height:112px;'/>
+  </a>
+
+  <h2 style='font-size: 24px; margin: 20px 0;'>NUT VM</h2>
+
+  <p style='margin: 16px 0;'>
+    <a href='https://ko-fi.com/community_scripts' target='_blank' rel='noopener noreferrer'>
+      <img src='https://img.shields.io/badge/&#x2615;-Buy us a coffee-blue' alt='spend Coffee' />
+    </a>
+  </p>
+
+  <span style='margin: 0 10px;'>
+    <i class="fa fa-github fa-fw" style="color: #f5f5f5;"></i>
+    <a href='https://github.com/community-scripts/ProxmoxVE' target='_blank' rel='noopener noreferrer' style='text-decoration: none; color: #00617f;'>GitHub</a>
+  </span>
+  <span style='margin: 0 10px;'>
+    <i class="fa fa-comments fa-fw" style="color: #f5f5f5;"></i>
+    <a href='https://github.com/community-scripts/ProxmoxVE/discussions' target='_blank' rel='noopener noreferrer' style='text-decoration: none; color: #00617f;'>Discussions</a>
+  </span>
+  <span style='margin: 0 10px;'>
+    <i class="fa fa-exclamation-circle fa-fw" style="color: #f5f5f5;"></i>
+    <a href='https://github.com/community-scripts/ProxmoxVE/issues' target='_blank' rel='noopener noreferrer' style='text-decoration: none; color: #00617f;'>Issues</a>
+  </span>
+</div>
+EOF
+  )
+  qm set "$VMID" -description "$DESCRIPTION" >/dev/null
 
   msg_ok "VM configured"
 }
@@ -893,7 +975,7 @@ setup_usb_passthrough() {
     usb_param="host=${UPS_VENDOR_PRODUCT}"
   fi
 
-  if $STD qm set "$VM_ID" --usb0 "$usb_param"; then
+  if $STD qm set "$VMID" --usb0 "$usb_param"; then
     msg_ok "USB passthrough configured"
   else
     msg_warn "Failed to set USB passthrough (continuing anyway)"
@@ -905,10 +987,11 @@ setup_usb_passthrough() {
 #===============================================================================
 
 start_vm() {
-  msg_info "Starting VM $VM_ID"
+  msg_info "Starting VM $VMID"
 
-  if ! $STD qm start "$VM_ID"; then
+  if ! $STD qm start "$VMID"; then
     msg_error "Failed to start VM"
+    exit
   fi
 
   msg_ok "VM started"
@@ -927,7 +1010,7 @@ get_vm_ip() {
   msg_info "Waiting for VM guest agent (~1-3 min on first boot)"
 
   while [[ $elapsed -lt $max_wait ]]; do
-    ip=$(qm guest cmd "$VM_ID" network-get-interfaces 2>/dev/null | python3 -c "
+    ip=$(qm guest cmd "$VMID" network-get-interfaces 2>/dev/null | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -963,9 +1046,13 @@ except Exception:
   VM_IP=$(whiptail --backtitle "Proxmox VE Helper Scripts" \
     --title "VM IP ADDRESS" \
     --inputbox "Enter VM IP address manually:" \
-    8 58 "" 3>&1 1>&2 2>&3) || msg_error "No IP address provided"
+    8 58 "" 3>&1 1>&2 2>&3) || {
+    msg_error "No IP address provided"
+    exit
+  }
   if [[ -z "$VM_IP" ]]; then
     msg_error "No IP address provided"
+    exit
   fi
 }
 
@@ -976,8 +1063,8 @@ except Exception:
 print_summary() {
   local summary_text
   summary_text="NUT VM Setup Complete!\n\n"
-  summary_text+="  VM ID:      $VM_ID\n"
-  summary_text+="  VM Name:    $VM_NAME\n"
+  summary_text+="  VM ID:      $VMID\n"
+  summary_text+="  VM Name:    $HN\n"
   summary_text+="  VM IP:      $VM_IP\n\n"
   summary_text+="  NUT Server: ${VM_IP}:${NUT_LISTEN_PORT}\n"
   summary_text+="  UPS Name:   $NUT_UPS_NAME\n\n"
@@ -1013,90 +1100,75 @@ print_summary() {
     done
   fi
 
-  if [[ "${VERBOSE:-}" == "yes" && ${#SCRIPT_ERROR_LOG[@]} -gt 0 ]]; then
-    echo
-    echo -e "${YW}Debug - Script error/warning log:${CL}"
-    for entry in "${SCRIPT_ERROR_LOG[@]}"; do
-      echo -e "  ${entry}"
-    done
-  fi
   echo
 }
 
 #===============================================================================
-# Main
+# Standard Entry Point
 #===============================================================================
 
-main() {
-  case "${1:-}" in
-  --help | -h)
-    echo "Usage: $0 [--debug|--version|--help]"
-    echo
-    echo "Creates an Ubuntu 24.04 VM on Proxmox and configures NUT netserver."
-    echo "Uses virt-customize for offline disk image setup (no SSH)."
-    echo
-    echo "Options:"
-    echo "  --help, -h      Show this help message"
-    echo "  --version       Show version"
-    echo "  --debug, -d     Enable debug tracing (set -x) and show all command output"
-    echo
-    echo "Environment:"
-    echo "  VERBOSE=yes     Show full command output"
-    exit 0
-    ;;
-  --version)
-    echo "nut-vm.sh v${SCRIPT_VERSION}"
-    exit 0
-    ;;
-  --debug | -d)
-    VERBOSE=yes
-    set -x
-    ;;
-  esac
+header_info
+echo -e "\n Loading..."
 
-  header_info
-  color
-  variables
-  catch_errors
+echo -e "${BOLD}  v${SCRIPT_VERSION}${CL}\n"
 
-  if [[ "${VERBOSE:-}" == "yes" ]]; then
-    STD=""
-    set -x
+check_root
+pve_check
+ssh_check
+check_dependencies
+check_virt_customize
+check_architecture
+
+if whiptail --backtitle "Proxmox VE Helper Scripts" --title "NUT VM" --yesno "This will create a New NUT VM. Proceed?" 10 58; then
+  :
+else
+  header_info && echo -e "${CROSS}${RD}User exited script${CL}\n" && exit
+fi
+
+start_script
+post_to_api_vm
+
+msg_info "Validating Storage"
+while read -r line; do
+  TAG=$(echo "$line" | awk '{print $1}')
+  TYPE=$(echo "$line" | awk '{printf "%-10s", $2}')
+  FREE=$(echo "$line" | numfmt --field 4-6 --from-unit=K --to=iec --format %.2f | awk '{printf( "%9sB", $6)}')
+  ITEM="  Type: $TYPE Free: $FREE "
+  OFFSET=2
+  if [[ $((${#ITEM} + OFFSET)) -gt ${MSG_MAX_LENGTH:-} ]]; then
+    MSG_MAX_LENGTH=$((${#ITEM} + OFFSET))
   fi
+  STORAGE_MENU+=("$TAG" "$ITEM" "OFF")
+done < <(pvesm status -content images | awk 'NR>1')
+VALID=$(pvesm status -content images | awk 'NR>1')
+if [ -z "$VALID" ]; then
+  msg_error "Unable to detect a valid storage location."
+  exit
+elif [ $((${#STORAGE_MENU[@]} / 3)) -eq 1 ]; then
+  STORAGE=${STORAGE_MENU[0]}
+else
+  while [ -z "${STORAGE:+x}" ]; do
+    STORAGE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Storage Pools" --radiolist \
+      "Which storage pool would you like to use for ${HN}?\nTo make a selection, use the Spacebar.\n" \
+      16 $((MSG_MAX_LENGTH + 23)) 6 \
+      "${STORAGE_MENU[@]}" 3>&1 1>&2 2>&3) || {
+      msg_error "Cancelled by user"
+      exit
+    }
+  done
+fi
+msg_ok "Using ${CL}${BL}$STORAGE${CL} ${GN}for Storage Location."
+msg_ok "Virtual Machine ID is ${CL}${BL}$VMID${CL}."
 
-  echo -e "${BOLD}  v${SCRIPT_VERSION}${CL}\n"
+# Execute creation flow
+download_cloud_image
+virt_customize_image
+create_vm
+detect_ups
+setup_usb_passthrough
+start_vm
+get_vm_ip
+print_summary
 
-  check_root
-  check_proxmox
-  check_dependencies
-  check_virt_customize
-  check_architecture
-
-  prompt_autogenerate_passwords
-  collect_vm_config
-  collect_nut_config
-
-  if ! prompt_yes_no "NUT Configuration:\n\n  UPS Name:     $NUT_UPS_NAME\n  UPS Desc:     $NUT_UPS_DESC\n  Driver:       $NUT_DRIVER\n  Admin User:   $NUT_ADMIN_USER\n  Monitor User: $NUT_MONITOR_USER\n  Listen:       $NUT_LISTEN_ADDR:$NUT_LISTEN_PORT\n\nProceed with VM and NUT setup?" "y" "NUT CONFIGURATION SUMMARY"; then
-    msg_error "Aborted by user"
-  fi
-
-  download_cloud_image
-  virt_customize_image
-  create_vm
-  detect_ups
-  setup_usb_passthrough
-  start_vm
-
-  get_vm_ip
-
-  print_summary
-}
-
-cleanup_work_file() {
-  [[ -n "${WORK_FILE:-}" ]] && rm -f "$WORK_FILE"
-}
-
-trap 'cleanup_work_file' EXIT
-trap '[[ -n "${SPINNER_PID:-}" ]] && kill "${SPINNER_PID:-}" 2>/dev/null; printf "\e[?25h"; cleanup_work_file; echo -e "\n${RD}Interrupted${CL}"; exit 130' INT TERM
-
-main "$@"
+post_update_to_api "done" "none"
+msg_ok "Completed successfully!\n"

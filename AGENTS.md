@@ -25,21 +25,20 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 
 ## Shell Conventions
 
-- `.shellcheckrc` sets `external-sources=true` because `build.func` / `cloud-init.func` are fetched at runtime.
+- `.shellcheckrc` sets `external-sources=true` because `api.func`, `vm-core.func`, and `cloud-init.func` are fetched at runtime.
 - Use `[[ ]]` for conditionals; quote variables.
 - VM scripts live in `vm/`, not `ct/` or `src/`.
 - Do **not** implement `update_script()` or write `/opt/${APP}_version.txt`.
-- `msg_error` intentionally calls `exit 1` — do **not** replace it with the community-scripts `msg_error` (which just logs and returns). See `docs/compliance-review.md`.
+- The script uses the community-scripts `msg_error` (which logs and returns). All call sites that must abort are written as `{ msg_error "..."; exit; }`.
 
 ## nut-vm.sh Architecture
 
-- Sources `build.func` and `cloud-init.func` at runtime via `curl` from `community-scripts/ProxmoxVED`.
-- Sources `build.func` for helpers (spinner, colors, `msg_*`) but locally overrides `msg_error` to call `exit 1` (the community-scripts version logs and returns).
+- Sources `api.func`, `vm-core.func`, and `cloud-init.func` at runtime via `curl` from `community-scripts/ProxmoxVED`.
 - Uses `virt-customize` for offline disk image modification: installs packages, writes NUT configs, creates a `nut-detect` oneshot systemd service, and installs nut-admin directly into the disk image before the VM is created.
-- Cloud-init handles first-boot network configuration, rootfs resize, and SSH host key generation. A vendor snippet (`/var/lib/vz/snippets/nut-vm-${VM_ID}-cloudinit.yaml`) sets the user password.
+- Cloud-init (via `setup_cloud_init` from `cloud-init.func`) handles first-boot network configuration, rootfs resize, and SSH host key generation. The password is set via `qm set --cipassword`.
 - `get_vm_ip()` has a 5-minute retry loop querying `network-get-interfaces` via the guest agent (`qm guest cmd <vmid> network-get-interfaces`); falls back to manual IP entry.
 - USB UPS detection parses `lsusb` and cross-references known vendor IDs. Duplicate models use bus-port notation (`host=4-1`).
-- Image is cached at `/var/lib/vz/template/iso` — not deleted after import.
+- Image is cached at `/var/lib/vz/template/cache` — not deleted after import.
 
 ## nut-admin (src/nut-admin/)
 
@@ -60,7 +59,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 - virt-customize network failure on Debian 13 (Proxmox VE 9): auto-installs `dhcpcd-base` when missing.
 - NUT service enablement varies by distro: `nut-driver-enumerator` → `nut-driver@` → `nut-driver`. Each unit is enabled individually with `|| true` so missing units don't abort the whole run.
 - nut-admin install failure inside virt-customize: wrapped in `&& ... || echo` so a download failure doesn't abort the VM setup.
-- Script interruption: `trap INT TERM` kills spinner, cleans up working disk image, and prints interrupt message.
+- Script interruption: `trap ERR` calls `error_handler`, `trap EXIT` runs `cleanup` (removes temp dir and working disk image), and `trap SIGINT/SIGTERM` posts failure to the API before exiting.
 - Hook ownership: per-UPS hook scripts must be `root:nut 750` so `upsmon` (running as the `nut` user) can execute them. `services/hooks.py::put_hook()` explicitly `chown`s to `root:nut` after writing.
 - `$UPSNAME` environment variable includes `@host:port` (e.g. `ups@localhost:3493`), but hook filenames use the bare UPS name. `notifycmd.sh` strips the suffix with `${UPSNAME%%@*}` before looking for the hook file.
 - UPS deletion cleans up orphaned hooks: `services/ups.py::delete_ups()` calls `delete_hook(name, event)` for every existing hook before returning.

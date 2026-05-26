@@ -32,7 +32,7 @@ Other USB UPS devices can be configured manually.
 
 ## Prerequisites
 
-- Proxmox VE 7.x or 8.x
+- Proxmox VE 8.1–8.4 or 9.0–9.2 (amd64 only)
 - Root access on Proxmox host
 - Internet connectivity (downloads Ubuntu cloud image)
 - `wget`, `curl`, `lsusb` installed (usually present by default)
@@ -70,31 +70,22 @@ bash vm/nut-vm.sh
 bash nut-vm.sh
 ```
 
-### CLI Options
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--help` | `-h` | Show help message and exit |
-| `--version` | | Print version (`nut-vm.sh v1.0.0`) and exit |
-| `--debug` | `-d` | Enable `set -x` tracing and show all command output (equivalent to `VERBOSE=yes`) |
-
 ### Environment Variables
 
 #### vm/nut-vm.sh
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VERBOSE` | _(unset)_ | Set to `yes` to show full command output. Same as `--debug` but without `set -x` trace. |
+| `VERBOSE` | _(unset)_ | Set to `yes` to show full command output (sets `$STD` to empty, revealing all command output). |
 | `NUT_ADMIN_URL_PREFIX` | _(unset)_ | When set, overrides the default GitHub Releases URL for the nut-admin tarball. Useful for pointing at a local build or mirror. |
+| `COMMUNITY_SCRIPTS_URL` | `https://git.community-scripts.org/community-scripts/ProxmoxVED/raw/branch/main` | Base URL for sourcing `api.func`, `vm-core.func`, and `cloud-init.func`. |
 
-By default, most commands (`qm`, `ssh`, etc.) are silenced. Set `VERBOSE=yes` or pass `--debug` to reveal output.
+By default, most commands (`qm`, `wget`, etc.) are silenced via `$STD`. Set `VERBOSE=yes` to reveal output.
 
 ```bash
-bash vm/nut-vm.sh --help            # Show help
-bash vm/nut-vm.sh --version         # Print version
-bash vm/nut-vm.sh --debug           # Trace + verbose output
-VERBOSE=yes bash vm/nut-vm.sh       # Verbose output only (no trace)
+VERBOSE=yes bash vm/nut-vm.sh                    # Verbose output
 NUT_ADMIN_URL_PREFIX=https://example.com/my-fork bash vm/nut-vm.sh
+COMMUNITY_SCRIPTS_URL=https://my-mirror.example.com bash vm/nut-vm.sh
 ```
 
 #### src/nut-admin/app.py
@@ -162,7 +153,7 @@ The script will guide you through:
 1. **VM Configuration**
    - VM ID (auto-detects next available)
    - Hostname (default: `nut-server`)
-   - Storage pool selection
+   - Storage pool selection (auto-detected from available pools)
    - Network bridge (default: `vmbr0`)
    - RAM, CPU cores, disk size
    - VM username and password
@@ -256,7 +247,7 @@ systemctl restart nut-client
 
 ### VM IP Not Detected
 
-- The cloud-init vendor snippet automatically installs and enables QEMU Guest Agent on first boot; verify it is running: `systemctl status qemu-guest-agent`
+- `virt-customize` installs and enables QEMU Guest Agent inside the disk image before the VM is created; verify it is running: `systemctl status qemu-guest-agent`
 - Check DHCP server is functioning
 - Manually enter IP when prompted
 
@@ -269,7 +260,7 @@ The script automatically sets `chmod 640` and `chown root:nut` on all NUT config
 - NUT passwords should be strong and unique
 - The netserver listens on all interfaces by default (`0.0.0.0`)
 - Consider firewall rules to restrict NUT port (3493) access
-- Cloud-init vendor snippet is written to `/var/lib/vz/snippets/` (mode 600) — remove after first boot if desired
+- The VM password is set via Proxmox's built-in cloud-init (`qm set --cipassword`)
 
 ## Architecture
 
