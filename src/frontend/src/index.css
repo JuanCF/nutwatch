@@ -511,7 +511,7 @@ button.danger:hover {
 }
 
 .card .meta::before {
-  content: "›";
+  content: "\203A";
   color: var(--text-muted);
 }
 
@@ -933,11 +933,11 @@ textarea#config-editor {
     transform: translateX(-100%);
     transition: transform 200ms ease;
   }
-  
+
   .app.sidebar-open .sidebar {
     transform: translateX(0);
   }
-  
+
   .sidebar-overlay {
     display: block;
     position: fixed;
@@ -948,36 +948,36 @@ textarea#config-editor {
     pointer-events: none;
     transition: opacity 200ms ease;
   }
-  
+
   .app.sidebar-open .sidebar-overlay {
     opacity: 1;
     pointer-events: auto;
   }
-  
+
   .main {
     margin-left: 0;
   }
-  
+
   .sidebar-toggle {
     display: flex;
   }
-  
+
   .content {
     padding: 1rem;
   }
-  
+
   .main-header {
     padding: 1rem;
   }
-  
+
   .stat-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .dashboard-row {
     grid-template-columns: 1fr;
   }
-  
+
   .card-grid {
     grid-template-columns: 1fr;
   }

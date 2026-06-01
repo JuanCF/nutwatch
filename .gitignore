@@ -1,3 +1,10 @@
 __pycache__/
 nut-admin.tar.gz
 opencode.json
+
+# Frontend dependencies
+src/frontend/node_modules/
+src/frontend/dist/
+
+# Generated static files (Vite build output)
+src/backend/static/

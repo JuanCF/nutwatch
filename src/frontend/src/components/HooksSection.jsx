@@ -1,0 +1,83 @@
+import { useState, useEffect, useCallback } from 'react';
+import { api } from '../api';
+import { useConfirm } from './ConfirmDialog';
+import { useModal } from './Modal';
+import HookEditor from './HookEditor';
+
+const NOTIFICATION_EVENTS = ['ONLINE', 'ONBATT', 'LOWBATT', 'COMMOK', 'COMMBAD', 'SHUTDOWN', 'REPLBATT', 'NOCOMM', 'NOPARENT'];
+
+export default function HooksSection({ upsname, onBack }) {
+  const [hookEvents, setHookEvents] = useState([]);
+  const { dangerConfirm, alert } = useConfirm();
+  const { openModal, closeModal } = useModal();
+
+  const loadHooks = useCallback(async () => {
+    try {
+      const r = await api('/hooks/' + encodeURIComponent(upsname));
+      setHookEvents(r.hooks || []);
+    } catch (e) {
+      setHookEvents([]);
+    }
+  }, [upsname]);
+
+  useEffect(() => { loadHooks(); }, [loadHooks]);
+
+  function openEditor(event) {
+    openModal(<HookEditor upsname={upsname} event={event} onClose={() => { closeModal(); loadHooks(); }} />);
+  }
+
+  async function deleteHook(event) {
+    const ok = await dangerConfirm('Delete hook for ' + upsname + ' on ' + event + '?');
+    if (!ok) return;
+    try {
+      await api('/hooks/' + encodeURIComponent(upsname) + '/' + event, { method: 'DELETE' });
+      loadHooks();
+    } catch (e) {
+      await alert('Failed to delete hook:\n' + e.message, 'Error');
+    }
+  }
+
+  return (
+    <>
+      <div className="toolbar" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <button className="secondary" onClick={onBack}>&larr; Back to UPS Devices</button>
+        <h2 id="hooks-ups-title" style={{ margin: 0 }}>Hooks for: {upsname}</h2>
+        <span></span>
+      </div>
+      <div id="hooks-table-wrap">
+        <table>
+          <thead><tr><th>Event</th><th>Has Hook</th><th>Actions</th></tr></thead>
+          <tbody id="hooks-body">
+            {NOTIFICATION_EVENTS.map(evt => {
+              const hasHook = hookEvents.includes(evt);
+              return (
+                <tr key={evt}>
+                  <td>{evt}</td>
+                  <td>
+                    {hasHook
+                      ? <span className="badge online">yes</span>
+                      : <span className="badge unknown">no</span>
+                    }
+                  </td>
+                  <td>
+                    {hasHook ? (
+                      <>
+                        <button className="secondary" onClick={() => openEditor(evt)}>Edit</button>
+                        <button className="secondary danger" onClick={() => deleteHook(evt)}>Delete</button>
+                      </>
+                    ) : (
+                      <button className="secondary" onClick={() => openEditor(evt)}>Add Hook</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="info-box" style={{ marginTop: '1rem', fontSize: '0.9rem' }}>
+        <p>Scripts placed here run when this UPS triggers the corresponding event. Each script receives <code>$UPSNAME</code> and <code>$NOTIFYTYPE</code> environment variables.</p>
+      </div>
+    </>
+  );
+}

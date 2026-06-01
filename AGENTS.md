@@ -5,7 +5,7 @@ Two components in this repo:
 | Path | What it is | Runs where |
 |------|-----------|------------|
 | `vm/nut-vm.sh` | Proxmox VM creation + NUT installer script | Proxmox host (as root) |
-| `src/nut-admin/` | Modular Flask web UI for NUT config management | Inside the VM |
+| `src/backend/` | Modular Flask web UI for NUT config management | Inside the VM |
 
 `plan.md` is a historical design spec — do **not** trust it literally; verify behavior in the actual scripts.
 
@@ -17,7 +17,7 @@ make lint           # shellcheck only
 make fmt            # shfmt -d -i 2 (check only)
 make fmt-fix        # shfmt -w -i 2 (auto-fix)
 make lint-python    # py_compile check on app.py
-make test-python    # pytest on src/nut-admin/tests/
+make test-python    # pytest on src/backend/tests/
 make install-tools  # apt-get shellcheck shfmt python3-pytest
 ```
 
@@ -40,7 +40,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 - USB UPS detection parses `lsusb` and cross-references known vendor IDs. Duplicate models use bus-port notation (`host=4-1`).
 - Image is cached at `/var/lib/vz/template/cache` — not deleted after import.
 
-## nut-admin (src/nut-admin/)
+## nut-admin (src/backend/)
 
 - Modular Flask app: `app.py` (bootstrap), `auth.py` (Bearer auth), `config.py` (constants), `utils.py` (helpers), `parsers/` (config parsers), `services/` (business logic), `routes/` (API blueprints), `static/` (SPA frontend).
 - Web UI tabs: **UPS Devices** (with per-UPS hook editor), **Users**, **Notifications** (`upsmon.conf` editor), **Logs**, **Config Files**.
@@ -49,7 +49,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 - Auth: Bearer token via `NUT_ADMIN_API_KEY` env var — if empty, auth is disabled.
 - Config writes use atomic `tempfile` + `os.replace`; input validated with `IDENTIFIER_REGEX`.
 - `install.sh` downloads a pre-built tarball from GitHub Releases (pinned by `NUT_ADMIN_REF` tag). To test a local build, run `make build-tarball`, serve the tarball, and set `NUT_ADMIN_URL_PREFIX`.
-- Unit tests in `tests/test_parsers.py` cover parser roundtrips. Import from `parsers` or `utils` (not `src.nut-admin.app`) — tests run from `src/nut-admin/`.
+- Unit tests in `tests/test_parsers.py` cover parser roundtrips. Import from `parsers` or `utils` (not `src.nut-admin.app`) — tests run from `src/backend/`.
 
 ## Edge Cases
 
