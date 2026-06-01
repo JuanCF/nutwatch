@@ -15,28 +15,28 @@ scripts (e.g. SSH into another machine and shut it down on `ONBATT`).
 
 | File | Purpose |
 |------|---------|
-| `src/nut-admin/parsers/upsmon_conf.py` | Parse / serialize all `upsmon.conf` directives into a structured dict |
-| `src/nut-admin/services/upsmon.py` | `get_upsmon_config()` / `put_upsmon_config(data)` with validation |
-| `src/nut-admin/routes/upsmon.py` | `GET /api/upsmon/config` and `PUT /api/upsmon/config` |
-| `src/nut-admin/services/hooks.py` | `list_hooks()`, `get_hook()`, `put_hook()`, `delete_hook()` for per-UPS event scripts |
-| `src/nut-admin/routes/hooks.py` | `GET/PUT/DELETE /api/hooks/<upsname>/<event>` |
-| `src/nut-admin/scripts/notifycmd.sh` | Sample notify script (installed to `/etc/nut/notifycmd.sh`) |
+| `src/backend/parsers/upsmon_conf.py` | Parse / serialize all `upsmon.conf` directives into a structured dict |
+| `src/backend/services/upsmon.py` | `get_upsmon_config()` / `put_upsmon_config(data)` with validation |
+| `src/backend/routes/upsmon.py` | `GET /api/upsmon/config` and `PUT /api/upsmon/config` |
+| `src/backend/services/hooks.py` | `list_hooks()`, `get_hook()`, `put_hook()`, `delete_hook()` for per-UPS event scripts |
+| `src/backend/routes/hooks.py` | `GET/PUT/DELETE /api/hooks/<upsname>/<event>` |
+| `src/backend/scripts/notifycmd.sh` | Sample notify script (installed to `/etc/nut/notifycmd.sh`) |
 
 ## Files to modify
 
 | File | Change |
 |------|--------|
-| `src/nut-admin/parsers/__init__.py` | Export `parse_upsmon_conf`, `serialize_upsmon_conf` |
-| `src/nut-admin/services/__init__.py` | Export `get_upsmon_config`, `put_upsmon_config`, hook service functions |
-| `src/nut-admin/routes/__init__.py` | Export `upsmon_bp`, `hooks_bp` |
-| `src/nut-admin/app.py` | Register `upsmon_bp` and `hooks_bp` |
-| `src/nut-admin/static/index.html` | Add **Notifications** nav button + section; add hooks editor modal |
-| `src/nut-admin/static/app.js` | Load/save handlers, editable monitor table, event forms, per-UPS hook editor |
-| `src/nut-admin/static/style.css` | Styles for hooks table and script editor textarea |
-| `src/nut-admin/tests/test_parsers.py` | Roundtrip tests for all `upsmon.conf` directives |
+| `src/backend/parsers/__init__.py` | Export `parse_upsmon_conf`, `serialize_upsmon_conf` |
+| `src/backend/services/__init__.py` | Export `get_upsmon_config`, `put_upsmon_config`, hook service functions |
+| `src/backend/routes/__init__.py` | Export `upsmon_bp`, `hooks_bp` |
+| `src/backend/app.py` | Register `upsmon_bp` and `hooks_bp` |
+| `src/backend/static/index.html` | Add **Notifications** nav button + section; add hooks editor modal |
+| `src/backend/static/app.js` | Load/save handlers, editable monitor table, event forms, per-UPS hook editor |
+| `src/backend/static/style.css` | Styles for hooks table and script editor textarea |
+| `src/backend/tests/test_parsers.py` | Roundtrip tests for all `upsmon.conf` directives |
 | `Makefile` | Include `scripts/` in `build-tarball` target |
 | `vm/nut-vm.sh` | Template: add `NOTIFYCMD`, upload sample script, create hook dirs |
-| `src/nut-admin/install.sh` | Copy sample script to `/etc/nut/`, create hook dirs on existing installs |
+| `src/backend/install.sh` | Copy sample script to `/etc/nut/`, create hook dirs on existing installs |
 
 ---
 

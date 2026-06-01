@@ -30,11 +30,11 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r src/nut-admin/requirements.txt
+        run: pip install -r src/backend/requirements.txt
 
       - name: Syntax check
-        run: find src/nut-admin -name '*.py' -print0 | xargs -0 python3 -m py_compile
+        run: find src/backend -name '*.py' -print0 | xargs -0 python3 -m py_compile
 
       - name: Tests
-        working-directory: src/nut-admin
+        working-directory: src/backend
         run: python3 -m pytest tests/ -v

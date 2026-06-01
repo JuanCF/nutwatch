@@ -36,7 +36,7 @@ The frontend is a single `static/index.html` (~580 lines) with inline CSS and in
 ## Directory Layout
 
 ```
-src/nut-admin/
+src/backend/
 ├── app.py                    # Flask app factory, entrypoint
 ├── config.py                 # Env vars, NUT_DIR, ALLOWED_CONFIGS, IDENTIFIER_REGEX
 ├── auth.py                   # require_admin decorator
@@ -179,8 +179,8 @@ The tarball includes everything the VM needs to run nut-admin:
 ### Current Behavior
 `build_nut_admin_script()` downloads individual files from raw GitHub URLs:
 ```bash
-curl .../src/nut-admin/app.py          → /opt/nut-admin/app.py
-curl .../src/nut-admin/static/index.html  → /opt/nut-admin/static/index.html
+curl .../src/backend/app.py          → /opt/nut-admin/app.py
+curl .../src/backend/static/index.html  → /opt/nut-admin/static/index.html
 curl .../nut-admin.service            → /etc/systemd/system/nut-admin.service
 ```
 

@@ -88,7 +88,7 @@ NUT_ADMIN_URL_PREFIX=https://example.com/my-fork bash vm/nut-vm.sh
 COMMUNITY_SCRIPTS_URL=https://my-mirror.example.com bash vm/nut-vm.sh
 ```
 
-#### src/nut-admin/app.py
+#### src/backend/app.py
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -96,7 +96,7 @@ COMMUNITY_SCRIPTS_URL=https://my-mirror.example.com bash vm/nut-vm.sh
 | `NUT_ADMIN_HOST` | `0.0.0.0` | Listen address for the web server. |
 | `NUT_ADMIN_PORT` | `8081` | Listen port for the web server. |
 
-#### src/nut-admin/install.sh
+#### src/backend/install.sh
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -127,7 +127,7 @@ The GitHub Actions workflow (`.github/workflows/release.yml`) will:
 2. Build `nut-admin.tar.gz` via `make build-tarball`
 3. Create a GitHub Release with the tarball as an asset
 
-To change which version `install.sh` downloads, update `NUT_ADMIN_REF` in `src/nut-admin/install.sh`.
+To change which version `install.sh` downloads, update `NUT_ADMIN_REF` in `src/backend/install.sh`.
 
 ### Testing a local build
 

@@ -1,0 +1,75 @@
+import { useState, useRef } from 'react';
+import { api } from '../api';
+import { useConfirm } from './ConfirmDialog';
+import { useModal } from './Modal';
+
+export default function UserModal({ mode, user, onSaved }) {
+  const [name, setName] = useState(user ? user.name : '');
+  const [password, setPassword] = useState('');
+  const [upsmon, setUpsmon] = useState(user ? user.upsmon || '' : '');
+  const [actions, setActions] = useState(user ? user.actions || '' : '');
+  const [instcmds, setInstcmds] = useState(user ? user.instcmds || '' : '');
+  const savePending = useRef(false);
+  const { alert } = useConfirm();
+  const { closeModal } = useModal();
+
+  const isEdit = mode === 'edit';
+
+  async function handleSave() {
+    if (savePending.current) return;
+    const trimmedName = name.trim();
+    if (!isEdit && !password) {
+      await alert('Password is required for new users', 'Validation Error');
+      return;
+    }
+    savePending.current = true;
+    try {
+      const body = {};
+      if (password) body.password = password;
+      if (upsmon.trim()) body.upsmon = upsmon.trim();
+      if (actions.trim()) body.actions = actions.trim();
+      if (instcmds.trim()) body.instcmds = instcmds.trim();
+      if (isEdit) {
+        await api('/users/' + encodeURIComponent(trimmedName), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      } else {
+        body.name = trimmedName;
+        await api('/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      }
+      onSaved();
+    } catch (e) {
+      await alert('Failed to save user:\n' + e.message, 'Error');
+    } finally {
+      savePending.current = false;
+    }
+  }
+
+  return (
+    <>
+      <h3>{isEdit ? 'Edit' : 'Add'} User</h3>
+      <div className="field">
+        <label>Username</label>
+        <input value={name} onChange={e => setName(e.target.value)} readOnly={isEdit} />
+      </div>
+      <div className="field">
+        <label>Password {isEdit ? '(leave blank to keep current)' : ''}</label>
+        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="******" />
+      </div>
+      <div className="field">
+        <label>upsmon</label>
+        <input value={upsmon} onChange={e => setUpsmon(e.target.value)} placeholder="master / slave" />
+      </div>
+      <div className="field">
+        <label>Actions</label>
+        <input value={actions} onChange={e => setActions(e.target.value)} placeholder="SET" />
+      </div>
+      <div className="field">
+        <label>Instcmds</label>
+        <input value={instcmds} onChange={e => setInstcmds(e.target.value)} placeholder="ALL" />
+      </div>
+      <div className="modal-actions">
+        <button className="secondary" onClick={closeModal}>Cancel</button>
+        <button className="primary" onClick={handleSave}>Save</button>
+      </div>
+    </>
+  );
+}

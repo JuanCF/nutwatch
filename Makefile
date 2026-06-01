@@ -1,11 +1,14 @@
-SHELL_FILES := $(shell find vm/ src/ -name "*.sh")
+SHELL_FILES := $(shell find vm/ src/backend/ -name "*.sh")
 
-.PHONY: check lint fmt fmt-fix install-tools lint-python test-python build-tarball
+.PHONY: check lint fmt fmt-fix install-tools lint-python test-python build-tarball build-frontend
 
 TARBALL := nut-admin.tar.gz
-TARBALL_DIR := src/nut-admin
+TARBALL_DIR := src/backend
 
-build-tarball:
+build-frontend:
+	cd src/frontend && npm ci && npm run build
+
+build-tarball: build-frontend
 	tar -czvf $(TARBALL) \
 		-C $(TARBALL_DIR) \
 		--exclude '__pycache__' \
@@ -30,10 +33,10 @@ fmt-fix:
 	shfmt -w -i 2 $(SHELL_FILES)
 
 lint-python:
-	@for f in $$(find src/nut-admin -name '*.py'); do python3 -m py_compile $$f || exit 1; done && echo "All Python files syntax OK"
+	@for f in $$(find src/backend -name '*.py'); do python3 -m py_compile $$f || exit 1; done && echo "All Python files syntax OK"
 
 test-python:
-	cd src/nut-admin && python3 -m pytest tests/ -v
+	cd src/backend && python3 -m pytest tests/ -v
 
 install-tools:
-	sudo apt-get install -y shellcheck shfmt python3-pytest
+	sudo apt-get install -y shellcheck shfmt python3-pytest nodejs npm
