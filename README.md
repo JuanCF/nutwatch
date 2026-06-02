@@ -104,7 +104,7 @@ COMMUNITY_SCRIPTS_URL=https://my-mirror.example.com bash vm/nut-vm.sh
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NUTWATCH_REF` | `v1.0.0` | Git tag used to construct the release download URL. |
+| `NUTWATCH_REF` | `v1.0.1` | Git tag used to construct the release download URL. |
 | `NUTWATCH_URL_PREFIX` | _(unset)_ | Base URL for downloading the nutwatch tarball. When set, overrides the GitHub releases URL. Useful for testing local builds. |
 
 ## Deployment & Releases

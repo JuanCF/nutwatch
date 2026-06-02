@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${NUTWATCH_REF:=v1.0.0}"
+: "${NUTWATCH_REF:=v1.0.1}"
 NUTWATCH_RELEASES_URL="https://github.com/JuanCF/nutwatch/releases/download/${NUTWATCH_REF}"
 NUTWATCH_TARBALL_URL="${NUTWATCH_URL_PREFIX:-${NUTWATCH_RELEASES_URL}}/nutwatch.tar.gz"
 
