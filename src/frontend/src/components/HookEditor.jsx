@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
+import { API } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
 
@@ -12,7 +13,7 @@ export default function HookEditor({ upsname, event, onClose }) {
 
   useEffect(() => {
     let cancelled = false;
-    api('/hooks/' + encodeURIComponent(upsname) + '/' + event)
+    api(API.hooks(upsname, event))
       .then(r => { if (!cancelled) setContent(r.content || ''); })
       .catch(() => { if (!cancelled) setContent(''); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -23,7 +24,7 @@ export default function HookEditor({ upsname, event, onClose }) {
     if (savePending.current) return;
     savePending.current = true;
     try {
-      await api('/hooks/' + encodeURIComponent(upsname) + '/' + event, {
+      await api(API.hooks(upsname, event), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
@@ -40,7 +41,7 @@ export default function HookEditor({ upsname, event, onClose }) {
     const ok = await dangerConfirm('Delete hook for ' + upsname + ' on ' + event + '?');
     if (!ok) return;
     try {
-      await api('/hooks/' + encodeURIComponent(upsname) + '/' + event, { method: 'DELETE' });
+      await api(API.hooks(upsname, event), { method: 'DELETE' });
       onClose();
     } catch (e) {
       await alert('Failed to delete hook:\n' + e.message, 'Error');

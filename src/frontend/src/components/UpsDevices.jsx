@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api';
+import { API } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
 import UpsCard from './UpsCard';
@@ -15,7 +16,7 @@ export default function UpsDevices({ onViewHooks }) {
 
   const loadUps = useCallback(async () => {
     try {
-      setUpsList(await api('/ups'));
+      setUpsList(await api(API.UPS));
     } catch (e) {
       setUpsList([]);
     }
@@ -30,7 +31,7 @@ export default function UpsDevices({ onViewHooks }) {
     try {
       const ok = await confirm(action + ' driver for ' + name + '?');
       if (!ok) return;
-      const r = await api('/driver/' + encodeURIComponent(name) + '/' + action, { method: 'POST' });
+      const r = await api(API.driver(name, action), { method: 'POST' });
       const title = r.returncode === 0 ? 'Driver Result' : 'Driver Error';
       await alert('Driver ' + action + ': rc=' + r.returncode + '\n' + (r.stdout || '') + '\n' + (r.stderr || ''), title);
       loadUps();
@@ -48,7 +49,7 @@ export default function UpsDevices({ onViewHooks }) {
     try {
       const ok = await dangerConfirm('Delete UPS "' + name + '"? This will stop the driver and remove all configuration.');
       if (!ok) return;
-      await api('/ups/' + encodeURIComponent(name), { method: 'DELETE' });
+      await api(API.ups(name), { method: 'DELETE' });
     } catch (e) {
       await alert('Failed to delete UPS:\n' + e.message, 'Error');
       return;
@@ -56,10 +57,10 @@ export default function UpsDevices({ onViewHooks }) {
       delete deletePending.current[key];
     }
     try {
-      const list = await api('/ups');
+      const list = await api(API.UPS);
       const r = list.length === 0
-        ? await api('/service/restart-monitor', { method: 'POST' })
-        : await api('/service/restart-all', { method: 'POST' });
+        ? await api(API.SERVICE_RESTART_MONITOR, { method: 'POST' })
+        : await api(API.SERVICE_RESTART_ALL, { method: 'POST' });
       if (r.returncode !== 0) {
         await alert('Service restart warning:\n' + (r.stderr || r.stdout || ''), 'Restart Warning');
       }
@@ -80,7 +81,7 @@ export default function UpsDevices({ onViewHooks }) {
   async function handleScan() {
     openModal(<><h3>Scanning USB...</h3><div className="scan-output">Running nut-scanner -U...</div></>);
     try {
-      const r = await api('/ups/scan', { method: 'POST' });
+      const r = await api(API.UPS_SCAN, { method: 'POST' });
       const devices = r.devices || [];
       if (r.returncode !== 0 && !devices.length) {
         openModal(

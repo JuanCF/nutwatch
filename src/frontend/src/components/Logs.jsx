@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
-
-const MAX_LOG_LINES = 1000;
+import { API, MAX_LOG_LINES } from '../constants';
+import { classifyLogLine } from '../utils/logs';
 
 export default function Logs() {
   const [logLines, setLogLines] = useState([]);
@@ -19,15 +19,12 @@ export default function Logs() {
     if (esRef.current) return;
     const box = boxRef.current;
     if (!box) return;
-    const es = new EventSource('/api/logs/stream');
+    const es = new EventSource(API.LOGS_STREAM);
     esRef.current = es;
     es.onmessage = ev => {
       if (pausedRef.current) return;
       const text = ev.data;
-      let cls = 'log-line';
-      if (/\berror\b|\bfail\b|\berr\b/i.test(text)) cls += ' error';
-      else if (/\bwarn\b|\bwarning\b/i.test(text)) cls += ' warn';
-      else if (/\binfo\b|\bstarted\b|\brunning\b/i.test(text)) cls += ' info';
+      const cls = classifyLogLine(text);
       setLogLines(prev => {
         const next = [...prev, { text, cls }];
         return next.length > MAX_LOG_LINES ? next.slice(next.length - MAX_LOG_LINES) : next;
@@ -52,12 +49,9 @@ export default function Logs() {
 
   async function loadRecent() {
     try {
-      const r = await api('/logs/recent?lines=100');
+      const r = await api(API.LOGS_RECENT);
       const lines = r.stdout.split('\n').filter(Boolean).map(text => {
-        let cls = 'log-line';
-        if (/\berror\b|\bfail\b|\berr\b/i.test(text)) cls += ' error';
-        else if (/\bwarn\b|\bwarning\b/i.test(text)) cls += ' warn';
-        else if (/\binfo\b|\bstarted\b|\brunning\b/i.test(text)) cls += ' info';
+        const cls = classifyLogLine(text);
         return { text, cls };
       });
       setLogLines(lines);
@@ -72,7 +66,7 @@ export default function Logs() {
       <div className="toolbar">
         <button className="secondary" id="log-pause" onClick={() => setPaused(v => !v)}>{paused ? 'Resume' : 'Pause'}</button>
         <button className="secondary" onClick={loadRecent}>Load Recent</button>
-        <label style={{ fontSize: '0.85rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
           <input type="checkbox" checked={autoScroll} onChange={e => setAutoScroll(e.target.checked)} /> Auto-scroll
         </label>
       </div>

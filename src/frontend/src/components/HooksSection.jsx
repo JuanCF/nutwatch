@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
+import { API, NOTIFICATION_EVENTS } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
 import HookEditor from './HookEditor';
-
-const NOTIFICATION_EVENTS = ['ONLINE', 'ONBATT', 'LOWBATT', 'COMMOK', 'COMMBAD', 'SHUTDOWN', 'REPLBATT', 'NOCOMM', 'NOPARENT'];
 
 export default function HooksSection({ upsname, onBack }) {
   const [hookEvents, setHookEvents] = useState([]);
@@ -13,7 +12,7 @@ export default function HooksSection({ upsname, onBack }) {
 
   const loadHooks = useCallback(async () => {
     try {
-      const r = await api('/hooks/' + encodeURIComponent(upsname));
+      const r = await api(API.hooks(upsname));
       setHookEvents(r.hooks || []);
     } catch (e) {
       setHookEvents([]);
@@ -30,7 +29,7 @@ export default function HooksSection({ upsname, onBack }) {
     const ok = await dangerConfirm('Delete hook for ' + upsname + ' on ' + event + '?');
     if (!ok) return;
     try {
-      await api('/hooks/' + encodeURIComponent(upsname) + '/' + event, { method: 'DELETE' });
+      await api(API.hooks(upsname, event), { method: 'DELETE' });
       loadHooks();
     } catch (e) {
       await alert('Failed to delete hook:\n' + e.message, 'Error');

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
+import { API } from '../constants';
+import { statusToBadgeClass } from '../utils/service';
 import Badge from './Badge';
 
 export default function Dashboard() {
@@ -11,9 +13,9 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      api('/ups').catch(() => []),
-      api('/users').catch(() => null),
-      api('/service/status-detailed').catch(() => null),
+      api(API.UPS).catch(() => []),
+      api(API.USERS).catch(() => null),
+      api(API.SERVICE_STATUS).catch(() => null),
     ]).then(([ups, users, svcs]) => {
       if (cancelled) return;
       setUpsList(ups);
@@ -91,7 +93,7 @@ export default function Dashboard() {
           <h3>Services</h3>
           <div className="dash-list">
             {loading ? <div className="empty">Loading...</div> : !services ? <div className="empty">Failed to load services</div> : Object.entries(services).map(([svc, info]) => {
-              const cls = info.active ? 'online' : (info.state === 'failed' ? 'offline' : 'unknown');
+              const cls = statusToBadgeClass(info);
               return (
                 <div key={svc} className="dash-svc-item">
                   <span className={`badge ${cls}`}>{svc}</span>

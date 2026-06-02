@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { API, CONFIG_FILENAMES, READONLY_CONFIG } from '../constants';
 import { useConfirm } from './ConfirmDialog';
-
-const CONFIG_NAMES = ['ups.conf', 'upsd.conf', 'upsmon.conf', 'upsd.users'];
 
 export default function ConfigFiles() {
   const [filename, setFilename] = useState('');
@@ -12,9 +11,9 @@ export default function ConfigFiles() {
 
   async function loadConfig(name) {
     setFilename(name);
-    setReadOnly(name === 'upsd.users');
+    setReadOnly(name === READONLY_CONFIG);
     try {
-      const data = await api('/config/' + encodeURIComponent(name));
+      const data = await api(API.configFile(name));
       setContent(data);
     } catch (e) {
       setContent('Error loading config: ' + e.message);
@@ -23,9 +22,9 @@ export default function ConfigFiles() {
 
   async function saveConfig() {
     if (!filename) { await alert('No config loaded', 'Error'); return; }
-    if (filename === 'upsd.users') { await alert('upsd.users is read-only', 'Error'); return; }
+    if (filename === READONLY_CONFIG) { await alert('upsd.users is read-only', 'Error'); return; }
     try {
-      await api('/config/' + encodeURIComponent(filename), { method: 'PUT', body: content });
+      await api(API.configFile(filename), { method: 'PUT', body: content });
       await alert('Saved ' + filename, 'Config Saved');
     } catch (e) {
       await alert('Failed to save config:\n' + e.message, 'Error');
@@ -36,13 +35,13 @@ export default function ConfigFiles() {
     <>
       <h2>Config Files</h2>
       <div className="config-buttons">
-        {CONFIG_NAMES.map(name => (
+        {CONFIG_FILENAMES.map(name => (
           <button key={name} className="secondary" onClick={() => loadConfig(name)}>{name}</button>
         ))}
       </div>
       <div className="toolbar">
         <button className="primary" onClick={saveConfig}>Save</button>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem', color: 'var(--muted)' }}>{filename}</span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{filename}</span>
       </div>
       <textarea
         id="config-editor"
