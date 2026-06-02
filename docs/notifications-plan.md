@@ -503,7 +503,7 @@ In the `build-tarball` target, add `scripts/` to the file list:
 
 ```makefile
 TARBALL := nutwatch.tar.gz
-TARBALL_DIR := src/nutwatch
+TARBALL_DIR := src/backend
 
 build-tarball:
 	tar -czvf $(TARBALL) \
