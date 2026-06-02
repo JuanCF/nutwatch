@@ -29,7 +29,7 @@ export const API = {
   LOGS_STREAM: '/api/logs/stream',
   LOGS_RECENT: '/logs/recent?lines=100',
   hooks: (upsname, event) =>
-    event ? `/hooks/${encodeURIComponent(upsname)}/${event}` : `/hooks/${encodeURIComponent(upsname)}`,
+    event ? `/hooks/${encodeURIComponent(upsname)}/${encodeURIComponent(event)}` : `/hooks/${encodeURIComponent(upsname)}`,
   ups: (name) => `/ups/${encodeURIComponent(name)}`,
   user: (name) => `/users/${encodeURIComponent(name)}`,
   configFile: (filename) => `/config/${encodeURIComponent(filename)}`,

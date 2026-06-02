@@ -22,7 +22,7 @@ export default function ConfigFiles() {
 
   async function saveConfig() {
     if (!filename) { await alert('No config loaded', 'Error'); return; }
-    if (filename === READONLY_CONFIG) { await alert('upsd.users is read-only', 'Error'); return; }
+    if (filename === READONLY_CONFIG) { await alert(READONLY_CONFIG + ' is read-only', 'Error'); return; }
     try {
       await api(API.configFile(filename), { method: 'PUT', body: content });
       await alert('Saved ' + filename, 'Config Saved');

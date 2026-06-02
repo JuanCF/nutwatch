@@ -237,7 +237,7 @@ export default function Notifications() {
       <h3>Notification Messages &amp; Flags</h3>
       <div id="notify-events-wrap">
         <table id="notify-events-table">
-          <thead><tr><th>Event</th><th>Message</th><th>SYSLOG</th><th>WALL</th><th>EXEC</th><th>IGNORE</th></tr></thead>
+          <thead><tr><th>Event</th><th>Message</th>{FLAGS.map(flag => <th key={flag}>{flag}</th>)}</tr></thead>
           <tbody>
             {NOTIFICATION_EVENTS.map(evt => {
               const msg = (form.notify_msg && form.notify_msg[evt]) || '';
