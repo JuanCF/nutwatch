@@ -12,7 +12,7 @@ def read_file(path: str) -> str:
 
 def write_file(path: str, content: str) -> None:
     dir_path = os.path.dirname(path)
-    fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix=".nut-admin-", suffix=".tmp")
+    fd, tmp_path = tempfile.mkstemp(dir=dir_path, prefix=".nutwatch-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)

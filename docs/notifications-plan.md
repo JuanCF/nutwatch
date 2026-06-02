@@ -4,7 +4,7 @@
 
 Add structured management of `upsmon.conf` global directives (`SHUTDOWNCMD`, `NOTIFYCMD`,
 `NOTIFYFLAG`, `NOTIFYMSG`, timing params) through a dedicated web UI tab and REST API in
-nut-admin.  Also ship a sample `NOTIFYCMD` script so users can easily configure per-UPS hook
+nutwatch.  Also ship a sample `NOTIFYCMD` script so users can easily configure per-UPS hook
 scripts (e.g. SSH into another machine and shut it down on `ONBATT`).
 
 > In NUT these settings are **global** in `upsmon.conf`, not per-UPS.  The `NOTIFYCMD` script
@@ -271,11 +271,11 @@ echo "[$TIMESTAMP] UPS=$UPSNAME EVENT=$NOTIFYTYPE" >>"$LOGFILE"
 
 ### Installation
 
-- **nut-admin tarball**: script lives under `/opt/nut-admin/scripts/`.
+- **nutwatch tarball**: script lives under `/opt/nutwatch/scripts/`.
 - **`vm/nut-vm.sh`**: writes the script inline to `$tmp_dir`, uploads to
   `/etc/nut/notifycmd.sh` via `virt-customize --upload`, creates
   `/etc/nut/notify.d/` and `/var/log/nut/`, and sets ownership (`root:nut`).
-- **`install.sh`**: copies from `/opt/nut-admin/scripts/notifycmd.sh` to
+- **`install.sh`**: copies from `/opt/nutwatch/scripts/notifycmd.sh` to
   `/etc/nut/notifycmd.sh`, creates hook dirs if not present.
 
 ### Ownership & permissions
@@ -502,8 +502,8 @@ vc_cmd+=(--run-command "chown nut:nut /var/log/nut")
 In the `build-tarball` target, add `scripts/` to the file list:
 
 ```makefile
-TARBALL := nut-admin.tar.gz
-TARBALL_DIR := src/nut-admin
+TARBALL := nutwatch.tar.gz
+TARBALL_DIR := src/nutwatch
 
 build-tarball:
 	tar -czvf $(TARBALL) \
@@ -516,7 +516,7 @@ build-tarball:
 		__init__.py app.py auth.py config.py utils.py \
 		parsers/ services/ routes/ \
 		static/ scripts/ \
-		nut-admin.service requirements.txt
+		nutwatch.service requirements.txt
 ```
 
 ---
@@ -526,9 +526,9 @@ build-tarball:
 After the `tar -xzf` line (around line 17), add:
 
 ```bash
-echo "[NUT-ADMIN] Installing notifycmd sample script..."
-if [[ -f /opt/nut-admin/scripts/notifycmd.sh ]]; then
-  cp /opt/nut-admin/scripts/notifycmd.sh /etc/nut/notifycmd.sh
+echo "[NUTWATCH] Installing notifycmd sample script..."
+if [[ -f /opt/nutwatch/scripts/notifycmd.sh ]]; then
+  cp /opt/nutwatch/scripts/notifycmd.sh /etc/nut/notifycmd.sh
   chmod 750 /etc/nut/notifycmd.sh
   chown root:nut /etc/nut/notifycmd.sh
 fi

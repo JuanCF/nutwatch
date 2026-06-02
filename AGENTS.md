@@ -1,11 +1,11 @@
-# Agent Notes: nut-vm-setup
+# Agent Notes: nutwatch
 
 Two components in this repo:
 
 | Path | What it is | Runs where |
 |------|-----------|------------|
 | `vm/nut-vm.sh` | Proxmox VM creation + NUT installer script | Proxmox host (as root) |
-| `src/backend/` | Modular Flask web UI for NUT config management | Inside the VM |
+| `src/backend/` | NutWatch (modular Flask web UI for NUT config management) | Inside the VM or standalone Linux host |
 
 `plan.md` is a historical design spec — do **not** trust it literally; verify behavior in the actual scripts.
 
@@ -34,22 +34,22 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 ## nut-vm.sh Architecture
 
 - Sources `api.func`, `vm-core.func`, and `cloud-init.func` at runtime via `curl` from `community-scripts/ProxmoxVED`.
-- Uses `virt-customize` for offline disk image modification: installs packages, writes NUT configs, creates a `nut-detect` oneshot systemd service, and installs nut-admin directly into the disk image before the VM is created.
+- Uses `virt-customize` for offline disk image modification: installs packages, writes NUT configs, creates a `nut-detect` oneshot systemd service, and installs NutWatch directly into the disk image before the VM is created.
 - Cloud-init (via `setup_cloud_init` from `cloud-init.func`) handles first-boot network configuration, rootfs resize, and SSH host key generation. The password is set via `qm set --cipassword`.
 - `get_vm_ip()` has a 5-minute retry loop querying `network-get-interfaces` via the guest agent (`qm guest cmd <vmid> network-get-interfaces`); falls back to manual IP entry.
 - USB UPS detection parses `lsusb` and cross-references known vendor IDs. Duplicate models use bus-port notation (`host=4-1`).
 - Image is cached at `/var/lib/vz/template/cache` — not deleted after import.
 
-## nut-admin (src/backend/)
+## NutWatch (src/backend/)
 
 - Modular Flask app: `app.py` (bootstrap), `auth.py` (Bearer auth), `config.py` (constants), `utils.py` (helpers), `parsers/` (config parsers), `services/` (business logic), `routes/` (API blueprints), `static/` (SPA frontend).
 - Web UI tabs: **UPS Devices** (with per-UPS hook editor), **Users**, **Notifications** (`upsmon.conf` editor), **Logs**, **Config Files**.
 - API endpoints: `/api/ups`, `/api/users`, `/api/upsmon/config`, `/api/hooks/<upsname>/<event>`, `/api/service/...`, `/api/logs/...`.
-- Runs as `nut-admin.service` on port 8081 (configurable via `NUT_ADMIN_HOST`, `NUT_ADMIN_PORT` env vars).
-- Auth: Bearer token via `NUT_ADMIN_API_KEY` env var — if empty, auth is disabled.
+- Runs as `nutwatch.service` on port 8081 (configurable via `NUTWATCH_HOST`, `NUTWATCH_PORT` env vars).
+- Auth: Bearer token via `NUTWATCH_API_KEY` env var — if empty, auth is disabled.
 - Config writes use atomic `tempfile` + `os.replace`; input validated with `IDENTIFIER_REGEX`.
-- `install.sh` downloads a pre-built tarball from GitHub Releases (pinned by `NUT_ADMIN_REF` tag). To test a local build, run `make build-tarball`, serve the tarball, and set `NUT_ADMIN_URL_PREFIX`.
-- Unit tests in `tests/test_parsers.py` cover parser roundtrips. Import from `parsers` or `utils` (not `src.nut-admin.app`) — tests run from `src/backend/`.
+- `install.sh` downloads a pre-built tarball from GitHub Releases (pinned by `NUTWATCH_REF` tag). To test a local build, run `make build-tarball`, serve the tarball, and set `NUTWATCH_URL_PREFIX`.
+- Unit tests in `tests/test_parsers.py` cover parser roundtrips. Import from `parsers` or `utils` (not from app.py) — tests run from `src/backend/`.
 
 ## Edge Cases
 
@@ -58,7 +58,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 - Slow DHCP / guest agent: retries for up to 5 minutes.
 - virt-customize network failure on Debian 13 (Proxmox VE 9): auto-installs `dhcpcd-base` when missing.
 - NUT service enablement varies by distro: `nut-driver-enumerator` → `nut-driver@` → `nut-driver`. Each unit is enabled individually with `|| true` so missing units don't abort the whole run.
-- nut-admin install failure inside virt-customize: wrapped in `&& ... || echo` so a download failure doesn't abort the VM setup.
+- NutWatch install failure inside virt-customize: wrapped in `&& ... || echo` so a download failure doesn't abort the VM setup.
 - Script interruption: `trap ERR` calls `error_handler`, `trap EXIT` runs `cleanup` (removes temp dir and working disk image), and `trap SIGINT/SIGTERM` posts failure to the API before exiting.
 - Hook ownership: per-UPS hook scripts must be `root:nut 750` so `upsmon` (running as the `nut` user) can execute them. `services/hooks.py::put_hook()` explicitly `chown`s to `root:nut` after writing.
 - `$UPSNAME` environment variable includes `@host:port` (e.g. `ups@localhost:3493`), but hook filenames use the bare UPS name. `notifycmd.sh` strips the suffix with `${UPSNAME%%@*}` before looking for the hook file.

@@ -1,4 +1,4 @@
-# nut-admin Modularization Plan
+# nutwatch Modularization Plan
 
 Extracted from the architecture session (`architecture.md`) — covers migrating from the monolithic `app.py` to a modular structure, including the proposed bundling and release pipeline.
 
@@ -65,7 +65,7 @@ src/backend/
 ├── tests/
 │   └── test_parsers.py       # Parser roundtrip tests
 ├── install.sh                # Deploy script (local copy or tarball download)
-├── nut-admin.service         # Systemd unit
+├── nutwatch.service         # Systemd unit
 └── requirements.txt          # Python dependencies
 ```
 
@@ -76,10 +76,10 @@ Constants and configuration from environment variables:
 - `NUT_DIR` — path to NUT config files
 - `ALLOWED_CONFIGS` — set of config filenames the API can read/write
 - `IDENTIFIER_REGEX` — validation regex for UPS names and usernames
-- `NUT_ADMIN_API_KEY`, `NUT_ADMIN_HOST`, `NUT_ADMIN_PORT`
+- `NUTWATCH_API_KEY`, `NUTWATCH_HOST`, `NUTWATCH_PORT`
 
 ### `auth.py`
-The `require_admin` decorator. Checks `NUT_ADMIN_API_KEY`; if empty, auth is disabled. Validates `Bearer` token from `Authorization` header.
+The `require_admin` decorator. Checks `NUTWATCH_API_KEY`; if empty, auth is disabled. Validates `Bearer` token from `Authorization` header.
 
 ### `parsers/`
 Pure functions for parsing and serializing NUT configuration files. Each parser has zero side effects and is independently testable.
@@ -159,46 +159,46 @@ Every git tag pushed matching `v*.*.*`.
 ### Build Steps
 1. Run lint, shellcheck, and Python tests (existing CI steps)
 2. Build the tarball with `make build-tarball`
-3. Upload `nut-admin.tar.gz` as a GitHub Release asset attached to the tag
+3. Upload `nutwatch.tar.gz` as a GitHub Release asset attached to the tag
 
 ### Release Host
-The release lives on the user's personal GitHub account (e.g., `github.com/JuanCF/proxmox-nut-server/releases`). The Proxmox helper script (submitted to `community-scripts/ProxmoxVE`) only references the release URL — the release artifacts stay in the personal repo.
+The release lives on the user's personal GitHub account (e.g., `github.com/JuanCF/nutwatch/releases`). The Proxmox helper script (submitted to `community-scripts/ProxmoxVE`) only references the release URL — the release artifacts stay in the personal repo.
 
 ### Bundle Contents
-The tarball includes everything the VM needs to run nut-admin:
+The tarball includes everything the VM needs to run nutwatch:
 
 | What | Included |
 |------|----------|
 | Python backend modules | `app.py`, `auth.py`, `config.py`, `utils.py`, `__init__.py`, `parsers/`, `services/`, `routes/` |
 | Frontend | `static/index.html` |
-| Service file | `nut-admin.service` |
+| Service file | `nutwatch.service` |
 | Dependencies | `requirements.txt` |
 
 ## Deploy Script Changes (`vm/nut-vm.sh`)
 
 ### Current Behavior
-`build_nut_admin_script()` downloads individual files from raw GitHub URLs:
+`build_nutwatch_script()` downloads individual files from raw GitHub URLs:
 ```bash
-curl .../src/backend/app.py          → /opt/nut-admin/app.py
-curl .../src/backend/static/index.html  → /opt/nut-admin/static/index.html
-curl .../nut-admin.service            → /etc/systemd/system/nut-admin.service
+curl .../src/backend/app.py          → /opt/nutwatch/app.py
+curl .../src/backend/static/index.html  → /opt/nutwatch/static/index.html
+curl .../nutwatch.service            → /etc/systemd/system/nutwatch.service
 ```
 
 ### New Behavior (Release-based)
 Instead of individual file downloads, the deploy script downloads one tarball:
 
 ```bash
-NUT_ADMIN_URL_PREFIX="https://github.com/JuanCF/proxmox-nut-server/releases/download/${NUT_ADMIN_REF}/"
-curl -fsSL "${NUT_ADMIN_URL_PREFIX}nut-admin.tar.gz" -o /tmp/nut-admin.tar.gz
-tar -xzf /tmp/nut-admin.tar.gz -C /opt/nut-admin/
+NUTWATCH_URL_PREFIX="https://github.com/JuanCF/nutwatch/releases/download/${NUTWATCH_REF}/"
+curl -fsSL "${NUTWATCH_URL_PREFIX}nutwatch.tar.gz" -o /tmp/nutwatch.tar.gz
+tar -xzf /tmp/nutwatch.tar.gz -C /opt/nutwatch/
 ```
 
-`NUT_ADMIN_REF` is pinned to a specific tag (e.g., `v1.0.0`).
+`NUTWATCH_REF` is pinned to a specific tag (e.g., `v1.0.0`).
 
 ### Systemd Service Update
 `ExecStart` path stays the same since the tarball extracts the app entry point at the expected location:
 ```ini
-ExecStart=/opt/nut-admin/venv/bin/python3 /opt/nut-admin/app.py
+ExecStart=/opt/nutwatch/venv/bin/python3 /opt/nutwatch/app.py
 ```
 
 ### URL Override for Local Development
@@ -206,23 +206,23 @@ ExecStart=/opt/nut-admin/venv/bin/python3 /opt/nut-admin/app.py
 
 ```bash
 # Production (default): GitHub Release
-NUT_ADMIN_URL_PREFIX="https://github.com/JuanCF/proxmox-nut-server/releases/download/v1.0.0/"
+NUTWATCH_URL_PREFIX="https://github.com/JuanCF/nutwatch/releases/download/v1.0.0/"
 
 # Local development override:
-NUT_ADMIN_URL_PREFIX="http://192.168.1.100:8080/" ./nut-vm.sh
+NUTWATCH_URL_PREFIX="http://192.168.1.100:8080/" ./nut-vm.sh
 ```
 
 This can be exposed as:
-- An environment variable: `NUT_ADMIN_URL_PREFIX`
-- A CLI flag: `--nut-admin-url=http://...`
-- A prompt in `collect_nut_config()`: "Use custom nut-admin URL? (leave blank for GitHub release)"
+- An environment variable: `NUTWATCH_URL_PREFIX`
+- A CLI flag: `--nutwatch-url=http://...`
+- A prompt in `collect_nut_config()`: "Use custom nutwatch URL? (leave blank for GitHub release)"
 
 ## Dev Workflow
 
-Since nut-admin must run on the VM (it calls `upsdrvctl`, `systemctl`, `journalctl`, reads/writes `/etc/nut/`), there is no local dev server that fully works. The VM with NUT installed is the runtime environment. Development approaches:
+Since nutwatch must run on the VM (it calls `upsdrvctl`, `systemctl`, `journalctl`, reads/writes `/etc/nut/`), there is no local dev server that fully works. The VM with NUT installed is the runtime environment. Development approaches:
 
 ### 1. Direct Edit on VM
-SSH into VM, edit Python/JS files directly, `systemctl restart nut-admin`. Simplest but no version control on the VM.
+SSH into VM, edit Python/JS files directly, `systemctl restart nutwatch`. Simplest but no version control on the VM.
 
 ### 2. Local Source, Remote Deploy
 Edit locally in the repo, `scp`/`rsync` individual files to the VM, restart the service.
@@ -238,7 +238,7 @@ make build-tarball
 cd /tmp && python3 -m http.server 8080
 
 # 3. Override URL in nut-vm.sh
-NUT_ADMIN_URL_PREFIX="http://YOUR_IP:8080" ./nut-vm.sh
+NUTWATCH_URL_PREFIX="http://YOUR_IP:8080" ./nut-vm.sh
 ```
 
 The tarball built locally is indistinguishable from a CI-generated one — same structure, same files. The VM doesn't know or care where it came from. The developer's machine must be reachable from the VM (same LAN or accessible IP), which is typical for Proxmox setups.

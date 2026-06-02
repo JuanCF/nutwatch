@@ -2,7 +2,7 @@ SHELL_FILES := $(shell find vm/ src/backend/ -name "*.sh")
 
 .PHONY: check lint fmt fmt-fix install-tools lint-python test-python build-tarball build-frontend
 
-TARBALL := nut-admin.tar.gz
+TARBALL := nutwatch.tar.gz
 TARBALL_DIR := src/backend
 
 build-frontend:
@@ -19,7 +19,7 @@ build-tarball: build-frontend
 		__init__.py app.py auth.py config.py utils.py \
 		parsers/ services/ routes/ \
 		static/ scripts/ \
-		nut-admin.service requirements.txt
+		nutwatch.service requirements.txt
 
 check: lint fmt lint-python test-python
 

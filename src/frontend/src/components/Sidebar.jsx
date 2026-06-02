@@ -65,7 +65,7 @@ export default function Sidebar({ active, onNavigate }) {
       <div className="sidebar-brand">
         <div className="brand-dot"></div>
         <div className="brand-title">
-          <span className="brand-text">NUT Admin</span>
+          <span className="brand-text">NutWatch</span>
           <span className="brand-version">{APP_VERSION}</span>
         </div>
       </div>

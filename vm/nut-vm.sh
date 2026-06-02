@@ -2,9 +2,9 @@
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: JuanCF (https://github.com/JuanCF)
 # License: MIT | https://github.com/community-scripts/ProxmoxVED/raw/main/LICENSE
-# Source: https://github.com/JuanCF/proxmox-nut-server
+# Source: https://github.com/JuanCF/nutwatch
 #
-# vm/nut-vm.sh - Proxmox NUT Server VM Setup Script
+# vm/nut-vm.sh - NutWatch NUT Server VM Setup Script
 #
 # Creates an Ubuntu 24.04 VM on Proxmox, configures USB passthrough for UPS,
 # and installs/configures NUT (Network UPS Tools) in netserver mode.
@@ -93,8 +93,8 @@ function default_settings() {
   NUT_UPS_NAME="ups"
   NUT_UPS_DESC="My UPS"
   NUT_DRIVER="usbhid-ups"
-  NUT_ADMIN_USER="admin"
-  NUT_ADMIN_PASS=""
+  NUTWATCH_USER="admin"
+  NUTWATCH_PASS=""
   NUT_MONITOR_USER="monuser"
   NUT_MONITOR_PASS=""
   NUT_LISTEN_ADDR="0.0.0.0"
@@ -105,10 +105,10 @@ function default_settings() {
   METHOD="default"
   AUTO_GENERATE_PASSWORDS=true
   VM_PASSWORD=$(generate_password 16)
-  NUT_ADMIN_PASS=$(generate_password 16)
+  NUTWATCH_PASS=$(generate_password 16)
   NUT_MONITOR_PASS=$(generate_password 16)
   GENERATED_PASSWORDS+=("VM password: $VM_PASSWORD")
-  GENERATED_PASSWORDS+=("NUT admin password: $NUT_ADMIN_PASS")
+  GENERATED_PASSWORDS+=("NutWatch password: $NUTWATCH_PASS")
   GENERATED_PASSWORDS+=("NUT monitor password: $NUT_MONITOR_PASS")
 
   echo -e "${DGN}Virtual Machine ID: ${BGN}${VMID}${CL}"
@@ -126,7 +126,7 @@ function advanced_settings() {
   prompt_autogenerate_passwords
   collect_vm_config
   collect_nut_config
-  if ! prompt_yes_no "NUT Configuration:\n\n  UPS Name:     $NUT_UPS_NAME\n  UPS Desc:     $NUT_UPS_DESC\n  Driver:       $NUT_DRIVER\n  Admin User:   $NUT_ADMIN_USER\n  Monitor User: $NUT_MONITOR_USER\n  Listen:       $NUT_LISTEN_ADDR:$NUT_LISTEN_PORT\n\nProceed with VM and NUT setup?" "y" "NUT CONFIGURATION SUMMARY"; then
+  if ! prompt_yes_no "NUT Configuration:\n\n  UPS Name:     $NUT_UPS_NAME\n  UPS Desc:     $NUT_UPS_DESC\n  Driver:       $NUT_DRIVER\n  Admin User:   $NUTWATCH_USER\n  Monitor User: $NUT_MONITOR_USER\n  Listen:       $NUT_LISTEN_ADDR:$NUT_LISTEN_PORT\n\nProceed with VM and NUT setup?" "y" "NUT CONFIGURATION SUMMARY"; then
     msg_error "Aborted by user"
     exit
   fi
@@ -158,7 +158,7 @@ header_info() {
    | |\  | |_| | | |
    |_| \_|\___/  |_|
 
-   Proxmox NUT Server VM Setup
+   NutWatch  —  NUT Web Administration Panel
 EOF
 }
 
@@ -172,8 +172,8 @@ readonly UBUNTU_IMG_NAME="ubuntu-24.04-minimal-cloudimg-amd64.img"
 readonly IMG_CACHE_DIR="/var/lib/vz/template/cache"
 readonly NUT_DEFAULT_PORT=3493
 readonly SCRIPT_VERSION="1.0.0"
-readonly NUT_ADMIN_REF="${NUT_ADMIN_REF:-v1.0.0}"
-readonly NUT_ADMIN_RELEASES_URL="https://github.com/JuanCF/proxmox-nut-server/releases/download/${NUT_ADMIN_REF}"
+readonly NUTWATCH_REF="${NUTWATCH_REF:-v1.0.0}"
+readonly NUTWATCH_RELEASES_URL="https://github.com/JuanCF/nutwatch/releases/download/${NUTWATCH_REF}"
 
 # UPS Vendor IDs
 # shellcheck disable=SC2034
@@ -454,8 +454,8 @@ collect_nut_config() {
 
   NUT_DRIVER="usbhid-ups"
 
-  prompt_default NUT_ADMIN_USER "NUT admin username" "admin" "NUT ADMIN USER"
-  prompt_password NUT_ADMIN_PASS "NUT admin password"
+  prompt_default NUTWATCH_USER "NUT daemon admin username" "admin" "NUT DAEMON ADMIN"
+  prompt_password NUTWATCH_PASS "NUT daemon admin password"
   prompt_default NUT_MONITOR_USER "NUT monitor username" "monuser" "NUT MONITOR USER"
   prompt_password NUT_MONITOR_PASS "NUT monitor password"
   prompt_default NUT_LISTEN_ADDR "NUT listen address" "0.0.0.0" "NUT LISTEN ADDRESS"
@@ -572,7 +572,7 @@ virt_customize_image() {
     "$NUT_LISTEN_ADDR" "$NUT_LISTEN_PORT" >"$tmp_dir/upsd.conf"
 
   printf '[%s]\n  password = %s\n  actions = SET\n  instcmds = ALL\n\n[%s]\n  password = %s\n  upsmon master\n' \
-    "$NUT_ADMIN_USER" "$NUT_ADMIN_PASS" "$NUT_MONITOR_USER" "$NUT_MONITOR_PASS" >"$tmp_dir/upsd.users"
+    "$NUTWATCH_USER" "$NUTWATCH_PASS" "$NUT_MONITOR_USER" "$NUT_MONITOR_PASS" >"$tmp_dir/upsd.users"
 
   cat >"$tmp_dir/upsmon.conf" <<'UPSMON_EOF'
 MONITOR __UPS_NAME__@localhost:__LISTEN_PORT__ 1 __MONITOR_USER__ __MONITOR_PASS__ master
@@ -737,18 +737,18 @@ SERVICE_EOF
     fi
   ')
 
-  # nut-admin install (graceful failure)
-  local tarball_url="${NUT_ADMIN_URL_PREFIX:-${NUT_ADMIN_RELEASES_URL}}/nut-admin.tar.gz"
+  # NutWatch install (graceful failure)
+  local tarball_url="${NUTWATCH_URL_PREFIX:-${NUTWATCH_RELEASES_URL}}/nutwatch.tar.gz"
   # shellcheck disable=SC2016
   vc_cmd+=(--run-command '
     TARBALL_URL="'"$tarball_url"'"
-    curl -fsSL "$TARBALL_URL" -o /tmp/nut-admin.tar.gz && \
-    mkdir -p /opt/nut-admin && tar -xzf /tmp/nut-admin.tar.gz -C /opt/nut-admin/ && \
-    python3 -m venv /opt/nut-admin/venv && \
-    /opt/nut-admin/venv/bin/pip install -q -r /opt/nut-admin/requirements.txt && \
-    cp /opt/nut-admin/nut-admin.service /etc/systemd/system/ && \
-    systemctl enable nut-admin || \
-    echo "[WARN] NUT Admin installation failed, continuing"
+    curl -fsSL "$TARBALL_URL" -o /tmp/nutwatch.tar.gz && \
+    mkdir -p /opt/nutwatch && tar -xzf /tmp/nutwatch.tar.gz -C /opt/nutwatch/ && \
+    python3 -m venv /opt/nutwatch/venv && \
+    /opt/nutwatch/venv/bin/pip install -q -r /opt/nutwatch/requirements.txt && \
+    cp /opt/nutwatch/nutwatch.service /etc/systemd/system/ && \
+    systemctl enable nutwatch || \
+    echo "[WARN] NutWatch installation failed, continuing"
   ')
 
   # System bootstrap
