@@ -17,9 +17,9 @@ modification) or cloud-init (first-boot configuration), never SSH.
 | 467–512 | `generate_cloudinit_snippet()` | virt-customize sets password + installs qemu-guest-agent |
 | 708–734 | `wait_port()` + `wait_ssh()` | No SSH wait loop |
 | 795–978 | `build_nut_install_script()` | 184-line heredoc replaced by `--run-command` |
-| 980–1086 | `build_nut_admin_script()` | 107-line heredoc replaced by `--run-command` |
+| 980–1086 | `build_nutwatch_script()` | 107-line heredoc replaced by `--run-command` |
 | 1088–1120 | `_deploy_and_run()` | SCP + SSH deploy eliminated |
-| 1122–1149 | `run_nut_install()` + `run_nut_admin_install()` | No remote exec needed |
+| 1122–1149 | `run_nut_install()` + `run_nutwatch_install()` | No remote exec needed |
 | 1151–1169 | `verify_nut_post_reboot()` | No SSH post-boot check needed |
 | 1292–1306 | main: wait_ssh + install + reboot + verify | Flow collapses |
 
@@ -29,7 +29,7 @@ modification) or cloud-init (first-boot configuration), never SSH.
 - Package install (`--install qemu-guest-agent,nut-server,nut-client,python3-pip,curl,...`) (~5 lines)
 - NUT config writes via `--run-command` (nut.conf, ups.conf/fallback, upsd.conf, upsd.users, upsmon.conf) (~30 lines)
 - nut-scanner oneshot systemd service for first-boot driver detection (~20 lines)
-- nut-admin install (curl tarball, venv, pip, systemd service) (~20 lines)
+- nutwatch install (curl tarball, venv, pip, systemd service) (~20 lines)
 - System bootstrap: hostname, user password via `chpasswd`, machine-id cleanup, SSH enable (~20 lines)
 
 ## Cloud-init becomes redundant
@@ -99,19 +99,19 @@ WantedBy=multi-user.target
 passthrough is now live), rewrites `ups.conf` with the correct driver/port/vendorid,
 and restarts NUT. The `ConditionPathExists` guard ensures it runs only once.
 
-## nut-admin: installed during virt-customize
+## nutwatch: installed during virt-customize
 
-nut-admin is entirely offline-safe — it downloads a tarball, extracts to
-`/opt/nut-admin`, creates a venv, and enables a systemd service:
+nutwatch is entirely offline-safe — it downloads a tarball, extracts to
+`/opt/nutwatch`, creates a venv, and enables a systemd service:
 
 ```bash
 virt-customize -a "$WORK_FILE" \
-  --run-command 'curl -fsSL "$TARBALL_URL" -o /tmp/nut-admin.tar.gz' \
-  --run-command 'mkdir -p /opt/nut-admin && tar -xzf /tmp/nut-admin.tar.gz -C /opt/nut-admin/' \
-  --run-command 'python3 -m venv /opt/nut-admin/venv' \
-  --run-command '/opt/nut-admin/venv/bin/pip install -r /opt/nut-admin/requirements.txt' \
-  --run-command 'cp /opt/nut-admin/nut-admin.service /etc/systemd/system/' \
-  --run-command 'systemctl enable nut-admin'
+  --run-command 'curl -fsSL "$TARBALL_URL" -o /tmp/nutwatch.tar.gz' \
+  --run-command 'mkdir -p /opt/nutwatch && tar -xzf /tmp/nutwatch.tar.gz -C /opt/nutwatch/' \
+  --run-command 'python3 -m venv /opt/nutwatch/venv' \
+  --run-command '/opt/nutwatch/venv/bin/pip install -r /opt/nutwatch/requirements.txt' \
+  --run-command 'cp /opt/nutwatch/nutwatch.service /etc/systemd/system/' \
+  --run-command 'systemctl enable nutwatch'
 ```
 
 ## virt-customize execution order
@@ -121,14 +121,14 @@ virt-customize -a "$WORK_FILE" \
 3. Write NUT configs: `nut.conf`, `upsd.conf`, `upsd.users`, `upsmon.conf`, fallback `ups.conf`
 4. Create symbolic links for nut-scanner libraries
 5. Write nut-detect oneshot systemd service
-6. Install nut-admin (download + venv + enable service)
+6. Install nutwatch (download + venv + enable service)
 7. System bootstrap: `--hostname`, set user password, machine-id cleanup, enable SSH
 
 ## First-boot sequence
 
 1. qemu-guest-agent starts (already installed + enabled)
 2. nut-detect oneshot fires → scans USB → rewrites `ups.conf` → restarts NUT
-3. nut-admin starts (already enabled, independent of nut-detect)
+3. nutwatch starts (already enabled, independent of nut-detect)
 
 ## What stays runtime (can't move offline)
 

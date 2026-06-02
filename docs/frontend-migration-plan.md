@@ -2,9 +2,9 @@
 
 ## Goal
 
-Extract the static frontend from `src/nut-admin/static/`, create a React + Vite project in `src/frontend/`, rename `src/nut-admin/` to `src/backend/`, and have Vite's build output land in `src/backend/static/` so Flask serves it exactly as before.
+Extract the static frontend from `src/nutwatch/static/`, create a React + Vite project in `src/frontend/`, rename `src/nutwatch/` to `src/backend/`, and have Vite's build output land in `src/backend/static/` so Flask serves it exactly as before.
 
-The tarball (`nut-admin.tar.gz`) internal structure must stay **identical** — `install.sh` and `vm/nut-vm.sh` must not change.
+The tarball (`nutwatch.tar.gz`) internal structure must stay **identical** — `install.sh` and `vm/nut-vm.sh` must not change.
 
 ---
 
@@ -12,13 +12,13 @@ The tarball (`nut-admin.tar.gz`) internal structure must stay **identical** — 
 
 ```
 src/
-├── nut-admin/
+├── nutwatch/
 │   ├── __init__.py              # empty package marker
 │   ├── app.py                   # Flask app factory + entrypoint (50 lines)
 │   ├── auth.py                  # Bearer token auth decorator (25 lines)
 │   ├── config.py                # Env vars, regex, allowed configs (15 lines)
-│   ├── install.sh               # Deploy script — downloads tarball, extracts to /opt/nut-admin (50 lines)
-│   ├── nut-admin.service        # systemd unit — runs from /opt/nut-admin (17 lines)
+│   ├── install.sh               # Deploy script — downloads tarball, extracts to /opt/nutwatch (50 lines)
+│   ├── nutwatch.service        # systemd unit — runs from /opt/nutwatch (17 lines)
 │   ├── requirements.txt         # flask==3.1.3, pytest==9.0.3
 │   ├── utils.py                 # read_file, write_file (atomic), run_cmd, stop_driver, ups_status (105 lines)
 │   ├── parsers/
@@ -57,10 +57,10 @@ vm/
 
 ### Tarball structure (what `make build-tarball` produces)
 
-The `-C src/nut-admin` flag strips the source prefix — the tarball is flat:
+The `-C src/nutwatch` flag strips the source prefix — the tarball is flat:
 
 ```
-nut-admin.tar.gz
+nutwatch.tar.gz
 ├── __init__.py
 ├── app.py
 ├── auth.py
@@ -75,7 +75,7 @@ nut-admin.tar.gz
 │   └── style.css
 ├── scripts/
 │   └── notifycmd.sh
-├── nut-admin.service
+├── nutwatch.service
 └── requirements.txt
 ```
 
@@ -85,13 +85,13 @@ nut-admin.tar.gz
 
 ```
 src/
-├── backend/                    # renamed from src/nut-admin/
+├── backend/                    # renamed from src/nutwatch/
 │   ├── __init__.py
 │   ├── app.py                  # unchanged (no catch-all needed)
 │   ├── auth.py
 │   ├── config.py
 │   ├── install.sh
-│   ├── nut-admin.service
+│   ├── nutwatch.service
 │   ├── requirements.txt
 │   ├── utils.py
 │   ├── parsers/
@@ -135,7 +135,7 @@ vm/
 ### New tarball structure (identical at root level)
 
 ```
-nut-admin.tar.gz
+nutwatch.tar.gz
 ├── __init__.py
 ├── app.py
 ├── auth.py
@@ -147,20 +147,20 @@ nut-admin.tar.gz
 ├── static/                  # Vite build output (index.html + assets/*.js + assets/*.css)
 ├── scripts/
 │   └── notifycmd.sh
-├── nut-admin.service
+├── nutwatch.service
 └── requirements.txt
 ```
 
-`install.sh`, `vm/nut-vm.sh`, and `nut-admin.service` see **no difference** — they extract the tarball to `/opt/nut-admin/` and everything is in the same place.
+`install.sh`, `vm/nut-vm.sh`, and `nutwatch.service` see **no difference** — they extract the tarball to `/opt/nutwatch/` and everything is in the same place.
 
 ---
 
-## Phase 1: Rename `src/nut-admin/` → `src/backend/`
+## Phase 1: Rename `src/nutwatch/` → `src/backend/`
 
 ### Step 1.1: Git rename
 
 ```bash
-git mv src/nut-admin src/backend
+git mv src/nutwatch src/backend
 ```
 
 ### Step 1.2: Update `Makefile`
@@ -168,13 +168,13 @@ git mv src/nut-admin src/backend
 **Current state:**
 ```makefile
 SHELL_FILES := $(shell find vm/ src/ -name "*.sh")
-TARBALL_DIR := src/nut-admin
+TARBALL_DIR := src/nutwatch
 
 lint-python:
-	@for f in $$(find src/nut-admin -name '*.py'); do ...
+	@for f in $$(find src/nutwatch -name '*.py'); do ...
 
 test-python:
-	cd src/nut-admin && python3 -m pytest tests/ -v
+	cd src/nutwatch && python3 -m pytest tests/ -v
 
 build-tarball:
 	tar -czvf $(TARBALL) \
@@ -187,7 +187,7 @@ build-tarball:
 		__init__.py app.py auth.py config.py utils.py \
 		parsers/ services/ routes/ \
 		static/ scripts/ \
-		nut-admin.service requirements.txt
+		nutwatch.service requirements.txt
 ```
 
 **After:**
@@ -215,7 +215,7 @@ build-tarball: build-frontend
 		__init__.py app.py auth.py config.py utils.py \
 		parsers/ services/ routes/ \
 		static/ scripts/ \
-		nut-admin.service requirements.txt
+		nutwatch.service requirements.txt
 
 install-tools:
 	sudo apt-get install -y shellcheck shfmt python3-pytest nodejs npm
@@ -232,13 +232,13 @@ Notes:
 **Current:**
 ```yaml
 - name: Install dependencies
-  run: pip install -r src/nut-admin/requirements.txt
+  run: pip install -r src/nutwatch/requirements.txt
 
 - name: Syntax check
-  run: find src/nut-admin -name '*.py' -print0 | xargs -0 python3 -m py_compile
+  run: find src/nutwatch -name '*.py' -print0 | xargs -0 python3 -m py_compile
 
 - name: Tests
-  working-directory: src/nut-admin
+  working-directory: src/nutwatch
   run: python3 -m pytest tests/ -v
 ```
 
@@ -284,21 +284,21 @@ release:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
-        files: nut-admin.tar.gz
+        files: nutwatch.tar.gz
         generate_release_notes: true
 ```
 
 ### Step 1.5: Update `.coderabbit.yaml`
 
-Replace all `src/nut-admin/` patterns:
+Replace all `src/nutwatch/` patterns:
 
 | Line(s) | Old | New |
 |---------|-----|-----|
-| 28 | `src/nut-admin/` | `src/backend/` |
-| 114 | `src/nut-admin/**/*.py` | `src/backend/**/*.py` |
-| 133-141 | `src/nut-admin/static/**` | `src/frontend/src/**` (updated instructions below) |
-| 144 | `src/nut-admin/install.sh` | `src/backend/install.sh` |
-| 154-158 | `src/nut-admin/tests/**` | `src/backend/tests/**` |
+| 28 | `src/nutwatch/` | `src/backend/` |
+| 114 | `src/nutwatch/**/*.py` | `src/backend/**/*.py` |
+| 133-141 | `src/nutwatch/static/**` | `src/frontend/src/**` (updated instructions below) |
+| 144 | `src/nutwatch/install.sh` | `src/backend/install.sh` |
+| 154-158 | `src/nutwatch/tests/**` | `src/backend/tests/**` |
 
 Updated static section instructions (lines 133-141):
 
@@ -318,7 +318,7 @@ Updated tests section instructions (lines 154-158):
 
 ```
 Old: "Tests import from the package directly (e.g., from parsers import
-      ..., from utils import ...) because they run from src/nut-admin/."
+      ..., from utils import ...) because they run from src/nutwatch/."
 
 New: "Tests import from the package directly (e.g., from parsers import
       ..., from utils import ...) because they run from src/backend/."
@@ -328,26 +328,26 @@ New: "Tests import from the package directly (e.g., from parsers import
 
 | Line | Old | New |
 |------|-----|-----|
-| 8 | `src/nut-admin/` | `src/backend/` |
-| 20 | `src/nut-admin/tests/` | `src/backend/tests/` |
-| 43 | `## nut-admin (src/nut-admin/)` | `## nut-admin (src/backend/)` |
-| 52 | `tests run from src/nut-admin/` | `tests run from src/backend/` |
+| 8 | `src/nutwatch/` | `src/backend/` |
+| 20 | `src/nutwatch/tests/` | `src/backend/tests/` |
+| 43 | `## nutwatch (src/nutwatch/)` | `## nutwatch (src/backend/)` |
+| 52 | `tests run from src/nutwatch/` | `tests run from src/backend/` |
 
 ### Step 1.7: Update `README.md`
 
 | Line | Old | New |
 |------|-----|-----|
-| 91 | `src/nut-admin/app.py` | `src/backend/app.py` |
-| 99 | `src/nut-admin/install.sh` | `src/backend/install.sh` |
-| 130 | `NUT_ADMIN_REF in src/nut-admin/install.sh` | `NUT_ADMIN_REF in src/backend/install.sh` |
+| 91 | `src/nutwatch/app.py` | `src/backend/app.py` |
+| 99 | `src/nutwatch/install.sh` | `src/backend/install.sh` |
+| 130 | `NUTWATCH_REF in src/nutwatch/install.sh` | `NUTWATCH_REF in src/backend/install.sh` |
 
 ### Step 1.8: Update `docs/modularization-plan.md`
 
-All references to `src/nut-admin/` → `src/backend/`. The directory layout diagram on line 39 needs updating.
+All references to `src/nutwatch/` → `src/backend/`. The directory layout diagram on line 39 needs updating.
 
 ### Step 1.9: Update `docs/notifications-plan.md`
 
-All references to `src/nut-admin/` → `src/backend/`.
+All references to `src/nutwatch/` → `src/backend/`.
 
 ### Step 1.10: Update `.gitignore`
 
@@ -382,7 +382,7 @@ These are the old vanilla SPA files. After the rename, they're at `src/backend/s
 
 ```json
 {
-  "name": "nut-admin-frontend",
+  "name": "nutwatch-frontend",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -443,7 +443,7 @@ Vite requires `index.html` at project root (not in `public/`). It becomes the en
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NUT Admin</title>
+  <title>NutWatch</title>
 </head>
 <body>
   <div id="root"></div>
@@ -845,13 +845,13 @@ make build-frontend    # cd src/frontend && npm ci && npm run build
                        # → populates src/backend/static/
 
 make build-tarball     # Depends on build-frontend
-                       # → nut-admin.tar.gz
+                       # → nutwatch.tar.gz
 ```
 
 ### Step 4.3: Verify tarball contents
 
 ```bash
-tar -tzf nut-admin.tar.gz
+tar -tzf nutwatch.tar.gz
 ```
 
 Expected output (flat structure, same as before):
@@ -889,7 +889,7 @@ static/assets/index-xxxxxxxx.css
 static/assets/index-xxxxxxxx.js
 scripts/
 scripts/notifycmd.sh
-nut-admin.service
+nutwatch.service
 requirements.txt
 ```
 
@@ -912,10 +912,10 @@ make build-tarball
 cd /tmp && python3 -m http.server 8080
 
 # In another terminal
-NUT_ADMIN_URL_PREFIX="http://YOUR_IP:8080" ./vm/nut-vm.sh
+NUTWATCH_URL_PREFIX="http://YOUR_IP:8080" ./vm/nut-vm.sh
 ```
 
-The Proxmox script downloads the tarball from the local server, extracts to `/opt/nut-admin/`, enables the service. Flask serves the Vite-built React app on port 8081.
+The Proxmox script downloads the tarball from the local server, extracts to `/opt/nutwatch/`, enables the service. Flask serves the Vite-built React app on port 8081.
 
 ### Step 4.6: Smoke test the web UI
 
@@ -936,7 +936,7 @@ The Proxmox script downloads the tarball from the local server, extracts to `/op
 
 | Action | File |
 |--------|------|
-| **Rename** | `src/nut-admin/` → `src/backend/` |
+| **Rename** | `src/nutwatch/` → `src/backend/` |
 | **Create** | `src/frontend/package.json` |
 | **Create** | `src/frontend/vite.config.js` |
 | **Create** | `src/frontend/index.html` |
@@ -966,7 +966,7 @@ The Proxmox script downloads the tarball from the local server, extracts to `/op
 | **Delete (git)** | `src/backend/static/app.js` |
 | **Delete (git)** | `src/backend/static/style.css` |
 | **Modify** | `Makefile` — `TARBALL_DIR`, `SHELL_FILES`, `lint-python`, `test-python`, add `build-frontend`, update `install-tools` |
-| **Modify** | `.github/workflows/lint.yml` — `src/nut-admin` → `src/backend` |
+| **Modify** | `.github/workflows/lint.yml` — `src/nutwatch` → `src/backend` |
 | **Modify** | `.github/workflows/release.yml` — same paths + Node.js setup + frontend build step |
 | **Modify** | `.coderabbit.yaml` — all path patterns to `src/backend/`, static section to `src/frontend/src/`, updated instructions |
 | **Modify** | `AGENTS.md` — path updates |
@@ -976,7 +976,7 @@ The Proxmox script downloads the tarball from the local server, extracts to `/op
 | **Modify** | `.gitignore` — add `src/frontend/node_modules/`, `src/frontend/dist/`, `src/backend/static/` |
 | **No change** | `vm/nut-vm.sh` |
 | **No change** | `src/backend/install.sh` |
-| **No change** | `src/backend/nut-admin.service` |
+| **No change** | `src/backend/nutwatch.service` |
 | **No change** | `src/backend/scripts/notifycmd.sh` |
 | **No change** | `src/backend/tests/test_parsers.py` |
 | **No change** | All `src/backend/parsers/` files |

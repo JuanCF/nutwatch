@@ -1,22 +1,24 @@
-# Proxmox NUT VM Setup Script
+# NutWatch — NUT Web Administration Panel
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A bash script to automatically create an Ubuntu 24.04 VM on Proxmox VE, configure USB passthrough for your UPS, and set up NUT (Network UPS Tools) in netserver mode.
+A standalone web administration panel for NUT (Network UPS Tools), installable on a Raspberry Pi or any Linux system, with Wake on LAN support and detailed UPS monitoring.
 
-> **Why a VM instead of LXC?** NUT cannot run reliably in LXC containers due to kernel driver detachment restrictions. This script creates a lightweight VM specifically for NUT.
+This repository also includes `vm/nut-vm.sh`, a bash script to automatically create an Ubuntu 24.04 VM on Proxmox VE with NUT pre-configured in netserver mode and the NutWatch web UI installed.
+
+> **Why a VM instead of LXC?** NUT cannot run reliably in LXC containers due to kernel driver detachment restrictions. The VM script creates a lightweight VM specifically for NUT.
 
 ## Features
 
-- 🖥️ **Automated VM Creation** - Creates Ubuntu 24.04 VM with optimized settings
-- 🔌 **USB UPS Detection** - Auto-detects and configures USB passthrough for supported UPS devices
-- ⚡ **NUT Server Setup** - Installs and configures NUT in netserver mode
-- 🔒 **Secure by Default** - Uses offline disk modification, sets proper NUT permissions
-- 🎯 **Interactive Configuration** - Guided prompts for all settings with sensible defaults
-- 📊 **Status Summary** - Provides test commands and client configuration snippets
-- 🛡️ **Error Handling** - Validates inputs, handles edge cases (duplicate UPS models, slow DHCP, etc.)
-- 🔑 **Auto-Generated Passwords** - Optionally generate secure passwords automatically
-- 🌐 **Web Admin UI** - Installs `nut-admin` (Flask app on port 8081) for managing NUT configs, notifications, and per-UPS event hooks via browser
+- **Web Admin UI** - NutWatch (Flask + React SPA on port 8081) for managing NUT configs, notifications, per-UPS event hooks, and service status via browser
+- **Automated VM Creation** - Creates Ubuntu 24.04 VM with optimized settings on Proxmox
+- **USB UPS Detection** - Auto-detects and configures USB passthrough for supported UPS devices
+- **NUT Server Setup** - Installs and configures NUT in netserver mode
+- **Secure by Default** - Uses offline disk modification, sets proper NUT permissions
+- **Interactive Configuration** - Guided prompts for all settings with sensible defaults
+- **Status Summary** - Provides test commands and client configuration snippets
+- **Error Handling** - Validates inputs, handles edge cases (duplicate UPS models, slow DHCP, etc.)
+- **Auto-Generated Passwords** - Optionally generate secure passwords automatically
 
 ## Supported UPS Vendors
 
@@ -30,31 +32,33 @@ A bash script to automatically create an Ubuntu 24.04 VM on Proxmox VE, configur
 
 Other USB UPS devices can be configured manually.
 
-## Prerequisites
+## Deployment Options
 
-- Proxmox VE 8.1–8.4 or 9.0–9.2 (amd64 only)
-- Root access on Proxmox host
-- Internet connectivity (downloads Ubuntu cloud image)
-- `wget`, `curl`, `lsusb` installed (usually present by default)
-- A USB UPS connected to the Proxmox host (optional; can be configured manually or skipped)
+### Standalone Install (Raspberry Pi / Any Linux)
 
-## Installation
-
-### Quick Install (One-Liner)
+Install NutWatch directly on a machine that already has NUT configured:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/JuanCF/proxmox-nut-server/main/vm/nut-vm.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/JuanCF/nutwatch/main/src/backend/install.sh)"
+```
+
+Set the `NUTWATCH_REF` env var to pin a specific release version.
+
+### Proxmox VM (One-Liner)
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/JuanCF/nutwatch/main/vm/nut-vm.sh)"
 ```
 
 ### Manual Download
 
 ```bash
 # Download the script
-curl -fsSL https://raw.githubusercontent.com/JuanCF/proxmox-nut-server/main/vm/nut-vm.sh -o nut-vm.sh
+curl -fsSL https://raw.githubusercontent.com/JuanCF/nutwatch/main/vm/nut-vm.sh -o nut-vm.sh
 
 # Or clone the repository
-git clone https://github.com/JuanCF/proxmox-nut-server.git
-cd proxmox-nut-server
+git clone https://github.com/JuanCF/nutwatch.git
+cd nutwatch
 
 # Run from source
 bash vm/nut-vm.sh
@@ -77,40 +81,40 @@ bash nut-vm.sh
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VERBOSE` | _(unset)_ | Set to `yes` to show full command output (sets `$STD` to empty, revealing all command output). |
-| `NUT_ADMIN_URL_PREFIX` | _(unset)_ | When set, overrides the default GitHub Releases URL for the nut-admin tarball. Useful for pointing at a local build or mirror. |
+| `NUTWATCH_URL_PREFIX` | _(unset)_ | When set, overrides the default GitHub Releases URL for the nutwatch tarball. Useful for pointing at a local build or mirror. |
 | `COMMUNITY_SCRIPTS_URL` | `https://git.community-scripts.org/community-scripts/ProxmoxVED/raw/branch/main` | Base URL for sourcing `api.func`, `vm-core.func`, and `cloud-init.func`. |
 
 By default, most commands (`qm`, `wget`, etc.) are silenced via `$STD`. Set `VERBOSE=yes` to reveal output.
 
 ```bash
 VERBOSE=yes bash vm/nut-vm.sh                    # Verbose output
-NUT_ADMIN_URL_PREFIX=https://example.com/my-fork bash vm/nut-vm.sh
+NUTWATCH_URL_PREFIX=https://example.com/my-fork bash vm/nut-vm.sh
 COMMUNITY_SCRIPTS_URL=https://my-mirror.example.com bash vm/nut-vm.sh
 ```
 
-#### src/backend/app.py
+#### NutWatch Web App (src/backend/app.py)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NUT_ADMIN_API_KEY` | _(empty)_ | Bearer token for API auth. If empty, auth is disabled (all requests allowed). |
-| `NUT_ADMIN_HOST` | `0.0.0.0` | Listen address for the web server. |
-| `NUT_ADMIN_PORT` | `8081` | Listen port for the web server. |
+| `NUTWATCH_API_KEY` | _(empty)_ | Bearer token for API auth. If empty, auth is disabled (all requests allowed). |
+| `NUTWATCH_HOST` | `0.0.0.0` | Listen address for the web server. |
+| `NUTWATCH_PORT` | `8081` | Listen port for the web server. |
 
 #### src/backend/install.sh
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NUT_ADMIN_REF` | `v1.0.0` | Git tag used to construct the release download URL. |
-| `NUT_ADMIN_URL_PREFIX` | _(unset)_ | Base URL for downloading the nut-admin tarball. When set, overrides the GitHub releases URL. Useful for testing local builds. |
+| `NUTWATCH_REF` | `v1.0.0` | Git tag used to construct the release download URL. |
+| `NUTWATCH_URL_PREFIX` | _(unset)_ | Base URL for downloading the nutwatch tarball. When set, overrides the GitHub releases URL. Useful for testing local builds. |
 
 ## Deployment & Releases
 
-The nut-admin web UI is deployed inside the VM as a pre-built tarball.
+The NutWatch web UI is deployed inside the VM as a pre-built tarball.
 
 ### How it works
 
 1. `vm/nut-vm.sh` downloads the Ubuntu cloud image and modifies it offline with `virt-customize`.
-2. During offline modification, NUT configs are written directly to the disk image and the nut-admin tarball is downloaded, unpacked to `/opt/nut-admin/`, and its systemd service is enabled.
+2. During offline modification, NUT configs are written directly to the disk image and the nutwatch tarball is downloaded, unpacked to `/opt/nutwatch/`, and its systemd service is enabled.
 3. The customized disk is imported into a new Proxmox VM. On first boot, a `nut-detect` oneshot service scans the USB UPS and auto-configures the correct driver.
 
 ### Creating a release
@@ -124,14 +128,14 @@ git push origin v1.2.3
 
 The GitHub Actions workflow (`.github/workflows/release.yml`) will:
 1. Run lint checks (`shellcheck`, `shfmt`, Python syntax, pytest)
-2. Build `nut-admin.tar.gz` via `make build-tarball`
+2. Build `nutwatch.tar.gz` via `make build-tarball`
 3. Create a GitHub Release with the tarball as an asset
 
-To change which version `install.sh` downloads, update `NUT_ADMIN_REF` in `src/backend/install.sh`.
+To change which version `install.sh` downloads, update `NUTWATCH_REF` in `src/backend/install.sh`.
 
 ### Testing a local build
 
-Run `make build-tarball` to generate `nut-admin.tar.gz` from local source files. Serve it over HTTP and point the install script at it:
+Run `make build-tarball` to generate `nutwatch.tar.gz` from local source files. Serve it over HTTP and point the install script at it:
 
 ```bash
 # Build the tarball
@@ -141,10 +145,10 @@ make build-tarball
 python3 -m http.server 8080 --directory .
 
 # Run the VM setup pointing at your local server
-NUT_ADMIN_URL_PREFIX="http://<your-ip>:8080" bash vm/nut-vm.sh
+NUTWATCH_URL_PREFIX="http://<your-ip>:8080" bash vm/nut-vm.sh
 ```
 
-The tarball is git-ignored (`.gitignore` contains `nut-admin.tar.gz`).
+The tarball is git-ignored (`.gitignore` contains `nutwatch.tar.gz`).
 
 ### Interactive Prompts
 
@@ -209,6 +213,9 @@ upsc ups@<VM_IP>:3493
 # Check NUT services inside VM (via Proxmox console)
 qm terminal <vmid>
 systemctl status nut-server nut-monitor
+
+# Access NutWatch web UI
+http://<VM_IP>:8081
 ```
 
 ## Configuring NUT Clients
@@ -274,7 +281,7 @@ Proxmox Host
  │   ├── virt-customize ─►│   │   ├── nut-driver (usbhid-ups)
  │   ├── Creates VM       │   │   ├── upsd (port 3493)
  │   ├── Detects UPS      │   │   ├── upsmon (with notifycmd hooks)
- │   └── Configures       │   └── nut-admin (port 8081)
+ │   └── Configures       │   └── NutWatch (port 8081)
        (offline disk          └── cloud-init (network, resize)
         modification)
 ```
@@ -297,7 +304,7 @@ Contributions welcome! Please feel free to submit a Pull Request.
 
 For issues, questions, or feature requests:
 
-- Open an [issue](https://github.com/JuanCF/proxmox-nut-server/issues)
+- Open an [issue](https://github.com/JuanCF/nutwatch/issues)
 - Proxmox Forums: https://forum.proxmox.com/
 - NUT Users Mailing List: https://alioth-lists.debian.net/lists/lists.alioth.debian.net
 

@@ -1,4 +1,4 @@
-# Plan: Proxmox NUT Server VM Setup Script
+# Plan: NutWatch — NUT Server VM Setup Script
 
 ## Context
 
@@ -110,7 +110,7 @@ Shows confirmation table + `prompt_yes_no` before proceeding.
 
 ### Section 5 — NUT Config Prompts (`collect_nut_config`)
 
-Globals: `NUT_UPS_NAME`, `NUT_UPS_DESC`, `NUT_DRIVER`, `NUT_ADMIN_USER`, `NUT_ADMIN_PASS`, `NUT_MONITOR_USER`, `NUT_MONITOR_PASS`, `NUT_LISTEN_ADDR`, `NUT_LISTEN_PORT`
+Globals: `NUT_UPS_NAME`, `NUT_UPS_DESC`, `NUT_DRIVER`, `NUTWATCH_USER`, `NUTWATCH_PASS`, `NUT_MONITOR_USER`, `NUT_MONITOR_PASS`, `NUT_LISTEN_ADDR`, `NUT_LISTEN_PORT`
 
 | Prompt | Default |
 |--------|---------|
@@ -224,8 +224,8 @@ STATEPATH /var/run/nut
 
 ### `/etc/nut/upsd.users`
 ```
-[$NUT_ADMIN_USER]
-  password = $NUT_ADMIN_PASS
+[$NUTWATCH_USER]
+  password = $NUTWATCH_PASS
   actions = SET
   instcmds = ALL
 

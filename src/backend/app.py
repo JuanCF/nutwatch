@@ -17,11 +17,11 @@ except ImportError:  # pragma: no cover
 
     Flask = _FakeFlask
 
-from config import NUT_ADMIN_HOST, NUT_ADMIN_PORT
+from config import NUTWATCH_HOST, NUTWATCH_PORT
 from routes import ups_bp, users_bp, upsmon_bp, hooks_bp, system_bp, logs_bp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("nut-admin")
+logger = logging.getLogger("nutwatch")
 
 
 def create_app():
@@ -47,4 +47,4 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host=NUT_ADMIN_HOST, port=NUT_ADMIN_PORT)
+    app.run(host=NUTWATCH_HOST, port=NUTWATCH_PORT)
