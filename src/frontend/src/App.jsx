@@ -9,20 +9,11 @@ import ConfigFiles from './components/ConfigFiles';
 import HooksSection from './components/HooksSection';
 import { ModalProvider } from './components/Modal';
 import { ConfirmProvider } from './components/ConfirmDialog';
+import { SECTIONS, SECTION_TITLES } from './constants';
 import './App.css';
 
-const PAGE_TITLES = {
-  dashboard: 'Dashboard',
-  ups: 'UPS Devices',
-  users: 'Users',
-  notifications: 'Notifications',
-  logs: 'Logs',
-  config: 'Config Files',
-  hooks: 'Hooks',
-};
-
 export default function App() {
-  const [section, setSection] = useState('dashboard');
+  const [section, setSection] = useState(SECTIONS.DASHBOARD);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentHooksUps, setCurrentHooksUps] = useState('');
 
@@ -42,29 +33,29 @@ export default function App() {
               <button className="sidebar-toggle" onClick={() => setSidebarOpen(v => !v)}>
                 &#9776;
               </button>
-              <h2 id="page-title">{PAGE_TITLES[section] || 'Dashboard'}</h2>
+              <h2 id="page-title">{SECTION_TITLES[section] || 'Dashboard'}</h2>
             </div>
             <div className="content">
-              <div className={`section ${section === 'dashboard' ? 'active' : ''}`}>
-                {section === 'dashboard' && <Dashboard />}
+              <div className={`section ${section === SECTIONS.DASHBOARD ? 'active' : ''}`}>
+                {section === SECTIONS.DASHBOARD && <Dashboard />}
               </div>
-              <div className={`section ${section === 'ups' ? 'active' : ''}`}>
-                {section === 'ups' && <UpsDevices onViewHooks={(name) => { setCurrentHooksUps(name); setSection('hooks'); }} />}
+              <div className={`section ${section === SECTIONS.UPS ? 'active' : ''}`}>
+                {section === SECTIONS.UPS && <UpsDevices onViewHooks={(name) => { setCurrentHooksUps(name); setSection(SECTIONS.HOOKS); }} />}
               </div>
-              <div className={`section ${section === 'users' ? 'active' : ''}`}>
-                {section === 'users' && <Users />}
+              <div className={`section ${section === SECTIONS.USERS ? 'active' : ''}`}>
+                {section === SECTIONS.USERS && <Users />}
               </div>
-              <div className={`section ${section === 'notifications' ? 'active' : ''}`}>
-                {section === 'notifications' && <Notifications />}
+              <div className={`section ${section === SECTIONS.NOTIFICATIONS ? 'active' : ''}`}>
+                {section === SECTIONS.NOTIFICATIONS && <Notifications />}
               </div>
-              <div className={`section ${section === 'logs' ? 'active' : ''}`}>
-                {section === 'logs' && <Logs />}
+              <div className={`section ${section === SECTIONS.LOGS ? 'active' : ''}`}>
+                {section === SECTIONS.LOGS && <Logs />}
               </div>
-              <div className={`section ${section === 'config' ? 'active' : ''}`}>
-                {section === 'config' && <ConfigFiles />}
+              <div className={`section ${section === SECTIONS.CONFIG ? 'active' : ''}`}>
+                {section === SECTIONS.CONFIG && <ConfigFiles />}
               </div>
-              <div className={`section ${section === 'hooks' ? 'active' : ''}`}>
-                {section === 'hooks' && <HooksSection upsname={currentHooksUps} onBack={() => showSection('ups')} />}
+              <div className={`section ${section === SECTIONS.HOOKS ? 'active' : ''}`}>
+                {section === SECTIONS.HOOKS && <HooksSection upsname={currentHooksUps} onBack={() => showSection(SECTIONS.UPS)} />}
               </div>
             </div>
           </main>

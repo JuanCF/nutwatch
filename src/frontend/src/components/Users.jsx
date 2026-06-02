@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api';
+import { API } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
 import UserModal from './UserModal';
@@ -12,7 +13,7 @@ export default function Users() {
 
   const loadUsers = useCallback(async () => {
     try {
-      setUserList(await api('/users'));
+      setUserList(await api(API.USERS));
     } catch (e) {
       setUserList([]);
     }
@@ -35,7 +36,7 @@ export default function Users() {
     try {
       const ok = await dangerConfirm('Delete user "' + name + '"?');
       if (!ok) return;
-      await api('/users/' + encodeURIComponent(name), { method: 'DELETE' });
+      await api(API.user(name), { method: 'DELETE' });
       loadUsers();
     } catch (e) {
       await alert('Failed to delete user:\n' + e.message, 'Error');

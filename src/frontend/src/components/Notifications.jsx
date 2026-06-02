@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api';
+import { API, NOTIFICATION_EVENTS, TIMING_KEYS, FLAGS, ROLES } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
-
-const NOTIFICATION_EVENTS = ['ONLINE', 'ONBATT', 'LOWBATT', 'COMMOK', 'COMMBAD', 'SHUTDOWN', 'REPLBATT', 'NOCOMM', 'NOPARENT'];
-const TIMING_KEYS = ['POLLFREQ', 'POLLFREQALERT', 'HOSTSYNC', 'DEADTIME', 'RBWARNTIME', 'NOCOMMWARNTIME', 'FINALDELAY'];
 
 export default function Notifications() {
   const [config, setConfig] = useState(null);
@@ -28,8 +26,8 @@ export default function Notifications() {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      api('/upsmon/config').catch(() => null),
-      api('/ups').catch(() => []),
+      api(API.UPSMON_CONFIG).catch(() => null),
+      api(API.UPS).catch(() => []),
     ]).then(([cfg, ups]) => {
       if (cancelled) return;
       setConfig(cfg);
@@ -70,7 +68,7 @@ export default function Notifications() {
       power: '1',
       username: '',
       password: '',
-      role: 'slave',
+      role: ROLES.SLAVE,
     }]);
   }, [upsNames]);
 
@@ -145,7 +143,7 @@ export default function Notifications() {
         notify_flag: form.notify_flag,
         timing,
       };
-      await api('/upsmon/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      await api(API.UPSMON_CONFIG, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       await alert('Notifications configuration saved.', 'Saved');
       openModal(
         <>
@@ -157,7 +155,7 @@ export default function Notifications() {
             <button className="primary" onClick={async () => {
               closeModal();
               try {
-                const r = await api('/service/restart-monitor', { method: 'POST' });
+                const r = await api(API.SERVICE_RESTART_MONITOR, { method: 'POST' });
                 if (r.returncode !== 0) {
                   await alert('Restart warning:\n' + (r.stderr || r.stdout || ''), 'Restart Warning');
                 } else {
@@ -206,8 +204,8 @@ export default function Notifications() {
                 <td><input value={m.password} onChange={e => updateMonitor(m.__id, 'password', e.target.value)} placeholder="******" /></td>
                 <td>
                   <select value={m.role} onChange={e => updateMonitor(m.__id, 'role', e.target.value)}>
-                    <option value="master">master</option>
-                    <option value="slave">slave</option>
+                    <option value={ROLES.MASTER}>{ROLES.MASTER}</option>
+                    <option value={ROLES.SLAVE}>{ROLES.SLAVE}</option>
                   </select>
                 </td>
                 <td><button className="secondary danger" onClick={() => removeMonitor(m.__id)}>Remove</button></td>
@@ -239,7 +237,7 @@ export default function Notifications() {
       <h3>Notification Messages &amp; Flags</h3>
       <div id="notify-events-wrap">
         <table id="notify-events-table">
-          <thead><tr><th>Event</th><th>Message</th><th>SYSLOG</th><th>WALL</th><th>EXEC</th><th>IGNORE</th></tr></thead>
+          <thead><tr><th>Event</th><th>Message</th>{FLAGS.map(flag => <th key={flag}>{flag}</th>)}</tr></thead>
           <tbody>
             {NOTIFICATION_EVENTS.map(evt => {
               const msg = (form.notify_msg && form.notify_msg[evt]) || '';
@@ -249,7 +247,7 @@ export default function Notifications() {
                 <tr key={evt}>
                   <td>{evt}</td>
                   <td><input value={msg} onChange={e => setNotifyMsg(evt, e.target.value)} /></td>
-                  {['SYSLOG', 'WALL', 'EXEC', 'IGNORE'].map(flag => {
+                  {FLAGS.map(flag => {
                     const disabled = flag !== 'IGNORE' && ignoreSet;
                     return (
                       <td key={flag} style={{ textAlign: 'center' }}>

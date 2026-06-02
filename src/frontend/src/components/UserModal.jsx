@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { api } from '../api';
+import { API } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
 
@@ -30,10 +31,10 @@ export default function UserModal({ mode, user, onSaved }) {
       if (actions.trim()) body.actions = actions.trim();
       if (instcmds.trim()) body.instcmds = instcmds.trim();
       if (isEdit) {
-        await api('/users/' + encodeURIComponent(trimmedName), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        await api(API.user(trimmedName), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       } else {
         body.name = trimmedName;
-        await api('/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        await api(API.USERS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       }
       onSaved();
     } catch (e) {
