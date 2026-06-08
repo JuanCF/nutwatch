@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 
 from auth import require_admin
 from config import IDENTIFIER_REGEX
-from services.ups import list_ups, get_ups, add_ups, edit_ups, delete_ups, scan_ups
+from services.ups import list_ups, get_ups, add_ups, edit_ups, delete_ups, scan_ups, get_ups_detail
 
 ups_bp = Blueprint("ups", __name__)
 
@@ -41,6 +41,17 @@ def get_ups_handler(name):
     if e is None:
         return jsonify({"error": "not found"}), 404
     return jsonify(e)
+
+
+@ups_bp.route("/api/ups/<name>/detail", methods=["GET"])
+@require_admin
+def get_ups_detail_handler(name):
+    if not IDENTIFIER_REGEX.match(name):
+        return jsonify({"error": "name contains invalid characters"}), 400
+    try:
+        return jsonify(get_ups_detail(name))
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @ups_bp.route("/api/ups/<name>", methods=["PUT"])

@@ -48,7 +48,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 - Runs as `nutwatch.service` on port 8081 (configurable via `NUTWATCH_HOST`, `NUTWATCH_PORT` env vars).
 - Auth: Bearer token via `NUTWATCH_API_KEY` env var — if empty, auth is disabled.
 - Config writes use atomic `tempfile` + `os.replace`; input validated with `IDENTIFIER_REGEX`.
-- `install.sh` downloads a pre-built tarball from GitHub Releases (pinned by `NUTWATCH_REF` tag). To test a local build, run `make build-tarball`, serve the tarball, and set `NUTWATCH_URL_PREFIX`.
+- `scripts/install.sh` downloads a pre-built tarball from GitHub Releases (pinned by `NUTWATCH_REF` tag). To test a local build, run `make build-tarball`, serve the tarball, and set `NUTWATCH_URL_PREFIX`.
 - Unit tests in `tests/test_parsers.py` cover parser roundtrips. Import from `parsers` or `utils` (not from app.py) — tests run from `src/backend/`.
 
 ## Edge Cases

@@ -39,7 +39,7 @@ Other USB UPS devices can be configured manually.
 Install NutWatch directly on a machine that already has NUT configured:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/JuanCF/nutwatch/main/src/backend/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/JuanCF/nutwatch/main/scripts/install.sh)"
 ```
 
 Set the `NUTWATCH_REF` env var to pin a specific release version.
@@ -100,7 +100,7 @@ COMMUNITY_SCRIPTS_URL=https://my-mirror.example.com bash vm/nut-vm.sh
 | `NUTWATCH_HOST` | `0.0.0.0` | Listen address for the web server. |
 | `NUTWATCH_PORT` | `8081` | Listen port for the web server. |
 
-#### src/backend/install.sh
+#### scripts/install.sh
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -131,7 +131,7 @@ The GitHub Actions workflow (`.github/workflows/release.yml`) will:
 2. Build `nutwatch.tar.gz` via `make build-tarball`
 3. Create a GitHub Release with the tarball as an asset
 
-To change which version `install.sh` downloads, update `NUTWATCH_REF` in `src/backend/install.sh`.
+To change which version `install.sh` downloads, update `NUTWATCH_REF` in `scripts/install.sh`.
 
 ### Testing a local build
 

@@ -141,7 +141,7 @@ reviews:
           deployment.
 
     # Install script for NutWatch inside the VM.
-    - path: src/backend/install.sh
+    - path: scripts/install.sh
       instructions: |
         - This runs as root inside the VM. Flag any `curl | sh` without
           checksum verification. The script pins `NUTWATCH_REF` (a git tag like

@@ -7,8 +7,9 @@ import UpsCard from './UpsCard';
 import UpsModal from './UpsModal';
 import ServiceStatus from './ServiceStatus';
 
-export default function UpsDevices({ onViewHooks }) {
+export default function UpsDevices({ onViewHooks, onViewDetail }) {
   const [upsList, setUpsList] = useState([]);
+  const [details, setDetails] = useState({});
   const { confirm, dangerConfirm, alert } = useConfirm();
   const { openModal, closeModal } = useModal();
   const deletePending = useRef({});
@@ -23,6 +24,22 @@ export default function UpsDevices({ onViewHooks }) {
   }, []);
 
   useEffect(() => { loadUps(); }, [loadUps]);
+
+  useEffect(() => {
+    if (upsList.length === 0) {
+      setDetails({});
+      return;
+    }
+    let cancelled = false;
+    const names = upsList.map(u => u.name);
+    Promise.all(names.map(n => api(API.upsDetail(n)).catch(() => null))).then(results => {
+      if (cancelled) return;
+      const m = {};
+      names.forEach((n, i) => { if (results[i]) m[n] = results[i]; });
+      setDetails(m);
+    });
+    return () => { cancelled = true; };
+  }, [upsList]);
 
   async function handleDriverAction(name, action) {
     const key = name + '|' + action;
@@ -148,10 +165,12 @@ export default function UpsDevices({ onViewHooks }) {
               <UpsCard
                 key={u.name}
                 ups={u}
+                detail={details[u.name]}
                 onEdit={handleEdit}
                 onHooks={onViewHooks}
                 onDriverAction={handleDriverAction}
                 onDelete={handleDelete}
+                onDetail={onViewDetail}
               />
             ))
         }

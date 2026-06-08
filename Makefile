@@ -1,4 +1,4 @@
-SHELL_FILES := $(shell find vm/ src/backend/ -name "*.sh")
+SHELL_FILES := $(shell find vm/ src/backend/ scripts/ -name "*.sh")
 
 .PHONY: check lint fmt fmt-fix install-tools lint-python test-python build-tarball build-frontend
 
@@ -15,7 +15,6 @@ build-tarball: build-frontend
 		--exclude '.pytest_cache' \
 		--exclude 'venv' \
 		--exclude 'tests' \
-		--exclude 'install.sh' \
 		__init__.py app.py auth.py config.py utils.py \
 		parsers/ services/ routes/ \
 		static/ scripts/ \
