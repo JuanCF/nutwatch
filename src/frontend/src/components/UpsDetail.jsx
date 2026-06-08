@@ -1,15 +1,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 import { API } from '../constants';
+import { formatRuntime } from '../utils/format';
 import Badge from './Badge';
-
-function fmtRuntime(seconds) {
-  if (seconds == null) return null;
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
 
 function niceLabel(key) {
   const name = key.includes('.') ? key.split('.').slice(1).join(' - ') : key;
@@ -21,7 +14,7 @@ function niceLabel(key) {
 function fmtVal(key, val) {
   if (typeof val === 'number') {
     if (key.endsWith('.runtime') || key === 'battery.runtime.low') {
-      const t = fmtRuntime(val);
+      const t = formatRuntime(val);
       return t || val + 's';
     }
     if (key.endsWith('.charge') || key.endsWith('.load')) return val + '%';

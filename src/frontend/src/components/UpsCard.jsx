@@ -1,12 +1,5 @@
 import Badge from './Badge';
-
-function formatRuntime(seconds) {
-  if (seconds == null) return null;
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
+import { formatRuntime } from '../utils/format';
 
 export default function UpsCard({ ups, detail, onEdit, onHooks, onDriverAction, onDelete, onDetail }) {
   const dirs = (ups.directives || []).map(d => d[0] + '=' + d[1]).join(', ');

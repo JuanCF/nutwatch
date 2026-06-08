@@ -1,5 +1,5 @@
 import { useModal } from './Modal';
-import { useTheme } from '../theme';
+import { useTheme, isLightHour } from '../theme';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -22,14 +22,8 @@ function currentLabel(theme, mode, lightStart, lightEnd) {
   const t = theme === 'light' ? 'Light' : 'Dark';
   if (mode === 'light' || mode === 'dark' || mode === 'system') return `${t} mode`;
   const fmt = (h) => String(h).padStart(2, '0') + ':00';
-  const period = isLightNow(lightStart, lightEnd) ? `light period (${fmt(lightStart)}–${fmt(lightEnd)})` : 'dark period';
+  const period = isLightHour(lightStart, lightEnd) ? `light period (${fmt(lightStart)}–${fmt(lightEnd)})` : 'dark period';
   return `${t} mode (${period})`;
-}
-
-function isLightNow(start, end) {
-  const now = new Date().getHours();
-  if (start < end) return now >= start && now < end;
-  return now >= start || now < end;
 }
 
 export default function ThemeSettings() {

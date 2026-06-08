@@ -20,7 +20,7 @@ function loadConfig() {
   return { mode: 'system', lightStart: 6, lightEnd: 20 };
 }
 
-function isLightHour(start, end) {
+export function isLightHour(start, end) {
   const now = new Date().getHours();
   if (start < end) return now >= start && now < end;
   return now >= start || now < end;
