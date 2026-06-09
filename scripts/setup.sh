@@ -55,10 +55,10 @@ declare -A UPS_VENDORS=(
 
 GENERATED_PASSWORDS=()
 
-info()  { echo -e "  [INFO]  $*"; }
-ok()    { echo -e "  [OK]    $*"; }
-warn()  { echo -e "  [WARN]  $*"; }
-err()   { echo -e "  [ERROR] $*" >&2; }
+info() { echo -e "  [INFO]  $*"; }
+ok() { echo -e "  [OK]    $*"; }
+warn() { echo -e "  [WARN]  $*"; }
+err() { echo -e "  [ERROR] $*" >&2; }
 
 generate_password() {
   local length="${1:-16}"
@@ -365,6 +365,7 @@ update_nutwatch() {
   if [[ -n "${NUTWATCH_API_KEY:-}" ]]; then
     mkdir -p /etc/nutwatch
     echo "NUTWATCH_API_KEY=${NUTWATCH_API_KEY}" >/etc/nutwatch/env
+    chmod 600 /etc/nutwatch/env
   fi
 
   systemctl daemon-reload
@@ -399,8 +400,13 @@ install_nutwatch() {
   curl -fsSL "${NUTWATCH_TARBALL_URL}" -o /tmp/nutwatch.tar.gz || {
     warn "Failed to download NutWatch tarball — skipping NutWatch install"
     warn "You can install it later with: sudo bash scripts/setup.sh --install-only"
-    return 1
+    NUTWATCH_SKIP=true
   }
+
+  if [[ "${NUTWATCH_SKIP:-}" == "true" ]]; then
+    rmdir "$NUTWATCH_DIR" 2>/dev/null || true
+    return 0
+  fi
 
   tar -xzf /tmp/nutwatch.tar.gz -C "$NUTWATCH_DIR/"
   rm -f /tmp/nutwatch.tar.gz
@@ -423,6 +429,7 @@ install_nutwatch() {
   if [[ -n "${NUTWATCH_API_KEY:-}" ]]; then
     mkdir -p /etc/nutwatch
     echo "NUTWATCH_API_KEY=${NUTWATCH_API_KEY}" >/etc/nutwatch/env
+    chmod 600 /etc/nutwatch/env
   fi
 
   cp "$NUTWATCH_DIR/nutwatch.service" /etc/systemd/system/
@@ -484,6 +491,17 @@ configure_firewall() {
 
 install_nut_detect_service() {
   local ups_name="$1" ups_desc="$2"
+  local escaped_ups_name escaped_ups_desc
+
+  escaped_ups_name="${ups_name//\\/\\\\}"
+  escaped_ups_name="${escaped_ups_name//\$/\\\$}"
+  escaped_ups_name="${escaped_ups_name//\"/\\\"}"
+  escaped_ups_name="${escaped_ups_name//\`/\\\`}"
+
+  escaped_ups_desc="${ups_desc//\\/\\\\}"
+  escaped_ups_desc="${escaped_ups_desc//\$/\\\$}"
+  escaped_ups_desc="${escaped_ups_desc//\"/\\\"}"
+  escaped_ups_desc="${escaped_ups_desc//\`/\\\`}"
 
   cat >/usr/local/bin/nut-detect.sh <<DETECT_EOF
 #!/bin/bash
@@ -494,12 +512,12 @@ VENDORID=\$(awk -F'"' '/vendorid/ {print \$2; exit}' /tmp/nut-scan.txt)
 PRODUCTID=\$(awk -F'"' '/productid/ {print \$2; exit}' /tmp/nut-scan.txt)
 
 {
-  printf "[%s]\n" "$ups_name"
+  printf "[%s]\n" "$escaped_ups_name"
   printf "  driver = %s\n" "\${DRIVER:-usbhid-ups}"
   printf "  port = %s\n" "\${PORT:-auto}"
   [[ -n "\$VENDORID" ]] && printf "  vendorid = %s\n" "\$VENDORID"
   [[ -n "\$PRODUCTID" ]] && printf "  productid = %s\n" "\$PRODUCTID"
-  printf "  desc = \"%s\"\n" "$ups_desc"
+  printf "  desc = \"%s\"\n" "$escaped_ups_desc"
   printf "  pollinterval = 5\n"
 } > /etc/nut/ups.conf
 
@@ -655,33 +673,33 @@ do_install_only() {
 
 main() {
   case "${1:-}" in
-    --update|update)
-      check_root
-      check_distro
-      check_dependencies
-      update_nutwatch
-      ;;
-    --install-only|install-only)
-      do_install_only
-      ;;
-    --help|-h)
-      echo "Usage: sudo bash $0 [--update|--install-only|--help]"
-      echo ""
-      echo "  (no args)       Fresh install — configure NUT + NutWatch from scratch"
-      echo "  --update        Update NutWatch application code only (preserves config, NUT, venv)"
-      echo "  --install-only  Install NutWatch only (assumes NUT already configured)"
-      echo "  --help          Show this help"
-      echo ""
-      echo "Environment variables:"
-      echo "  AUTO=1          — non-interactive mode (fresh install only)"
-      echo "  NUTWATCH_REF    — release tag (default: v1.0.1)"
-      echo "  NUTWATCH_API_KEY — Bearer token for NutWatch API auth"
-      echo ""
-      echo "See file header for full list of env vars."
-      ;;
-    *)
-      do_fresh_install
-      ;;
+  --update | update)
+    check_root
+    check_distro
+    check_dependencies
+    update_nutwatch
+    ;;
+  --install-only | install-only)
+    do_install_only
+    ;;
+  --help | -h)
+    echo "Usage: sudo bash $0 [--update|--install-only|--help]"
+    echo ""
+    echo "  (no args)       Fresh install — configure NUT + NutWatch from scratch"
+    echo "  --update        Update NutWatch application code only (preserves config, NUT, venv)"
+    echo "  --install-only  Install NutWatch only (assumes NUT already configured)"
+    echo "  --help          Show this help"
+    echo ""
+    echo "Environment variables:"
+    echo "  AUTO=1          — non-interactive mode (fresh install only)"
+    echo "  NUTWATCH_REF    — release tag (default: v1.0.1)"
+    echo "  NUTWATCH_API_KEY — Bearer token for NutWatch API auth"
+    echo ""
+    echo "See file header for full list of env vars."
+    ;;
+  *)
+    do_fresh_install
+    ;;
   esac
 }
 

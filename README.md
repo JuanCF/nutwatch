@@ -76,7 +76,7 @@ Other USB UPS devices can be configured manually.
 
 ## Architecture
 
-```
+```text
 Proxmox Host
 ├── USB UPS Device
 │   └── USB Passthrough ──┐
@@ -95,7 +95,7 @@ Proxmox Host
 
 ### NutWatch Backend Module Layout
 
-```
+```text
 src/backend/
 ├── app.py               # Flask application factory & entry point
 ├── auth.py              # Bearer token authentication decorator
@@ -131,7 +131,7 @@ src/backend/
 
 ### Frontend Module Layout
 
-```
+```text
 src/frontend/src/
 ├── App.jsx              # Root component with section routing
 ├── api.js               # Fetch wrapper for /api/*
