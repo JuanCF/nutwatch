@@ -90,6 +90,27 @@ def stop_driver_and_cleanup(name: str) -> tuple:
     return rc, out, err
 
 
+def ups_variables(name: str) -> dict | None:
+    rc, out, _ = run_cmd(["upsc", f"{name}@localhost"], timeout=10)
+    if rc != 0:
+        return None
+    result = {}
+    for line in out.splitlines():
+        line = line.strip()
+        if not line or ": " not in line:
+            continue
+        key, val = line.split(": ", 1)
+        try:
+            if "." in val:
+                val = float(val)
+            else:
+                val = int(val)
+        except ValueError:
+            pass
+        result[key] = val
+    return result
+
+
 def ups_status(name: str) -> str:
     rc, out, _ = run_cmd(["upsc", f"{name}@localhost"], timeout=5)
     if rc != 0:

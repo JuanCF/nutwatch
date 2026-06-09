@@ -12,7 +12,7 @@ from parsers.monitor import (
 )
 from parsers.nut_scanner import parse_nut_scanner_output
 from services.hooks import delete_hook, list_hooks
-from utils import read_file, write_file, run_cmd, ups_status, stop_driver_and_cleanup
+from utils import read_file, write_file, run_cmd, ups_status, ups_variables, stop_driver_and_cleanup
 
 DEFAULT_POLLINTERVAL = "5"
 
@@ -47,6 +47,13 @@ def get_ups(name: str):
             e["status"] = ups_status(name)
             return e
     return None
+
+
+def get_ups_detail(name: str):
+    vars_dict = ups_variables(name)
+    if vars_dict is None:
+        raise RuntimeError(f"Failed to query UPS '{name}' — is the driver running?")
+    return vars_dict
 
 
 def add_ups(data: dict) -> tuple:

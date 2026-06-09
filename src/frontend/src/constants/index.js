@@ -1,6 +1,7 @@
 export const SECTIONS = {
   DASHBOARD: 'dashboard',
   UPS: 'ups',
+  UPS_DETAIL: 'ups-detail',
   USERS: 'users',
   NOTIFICATIONS: 'notifications',
   LOGS: 'logs',
@@ -11,6 +12,7 @@ export const SECTIONS = {
 export const SECTION_TITLES = {
   [SECTIONS.DASHBOARD]: 'Dashboard',
   [SECTIONS.UPS]: 'UPS Devices',
+  [SECTIONS.UPS_DETAIL]: 'UPS Detail',
   [SECTIONS.USERS]: 'Users',
   [SECTIONS.NOTIFICATIONS]: 'Notifications',
   [SECTIONS.LOGS]: 'Logs',
@@ -31,6 +33,7 @@ export const API = {
   hooks: (upsname, event) =>
     event ? `/hooks/${encodeURIComponent(upsname)}/${encodeURIComponent(event)}` : `/hooks/${encodeURIComponent(upsname)}`,
   ups: (name) => `/ups/${encodeURIComponent(name)}`,
+  upsDetail: (name) => `/ups/${encodeURIComponent(name)}/detail`,
   user: (name) => `/users/${encodeURIComponent(name)}`,
   configFile: (filename) => `/config/${encodeURIComponent(filename)}`,
   driver: (name, action) => `/driver/${encodeURIComponent(name)}/${action}`,
