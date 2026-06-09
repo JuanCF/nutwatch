@@ -22,6 +22,7 @@ function loadConfig() {
 
 export function isLightHour(start, end) {
   const now = new Date().getHours();
+  if (start === end) return false;
   if (start < end) return now >= start && now < end;
   return now >= start || now < end;
 }
