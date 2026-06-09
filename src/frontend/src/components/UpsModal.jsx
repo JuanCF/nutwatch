@@ -114,11 +114,11 @@ export default function UpsModal({ mode, ups, scanData, onSaved }) {
       <div className="field">
         <label>Extra directives (key=value per line)</label>
         <textarea
+          className="ups-modal-textarea"
           value={directives}
           onChange={e => setDirectives(e.target.value)}
-          style={{ height: '80px', fontFamily: 'var(--mono)', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', padding: '0.4rem', width: '100%', resize: 'vertical' }}
         />
-        {showPollWarning && <div style={{ color: 'var(--yellow)', fontSize: '0.8rem', marginTop: '0.25rem' }}>Warning: pollinterval lower than {POLL_INTERVAL_MIN} may cause instability.</div>}
+        {showPollWarning && <div className="ups-modal-warning">Warning: pollinterval lower than {POLL_INTERVAL_MIN} may cause instability.</div>}
       </div>
       <div className="modal-actions">
         <button className="secondary" onClick={closeModal}>Cancel</button>

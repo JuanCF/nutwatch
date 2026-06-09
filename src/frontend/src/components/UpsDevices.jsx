@@ -7,7 +7,7 @@ import UpsCard from './UpsCard';
 import UpsModal from './UpsModal';
 import ServiceStatus from './ServiceStatus';
 
-export default function UpsDevices({ onViewHooks, onViewDetail }) {
+export default function UpsDevices() {
   const [upsList, setUpsList] = useState([]);
   const [details, setDetails] = useState({});
   const { confirm, dangerConfirm, alert } = useConfirm();
@@ -167,10 +167,8 @@ export default function UpsDevices({ onViewHooks, onViewDetail }) {
                 ups={u}
                 detail={details[u.name]}
                 onEdit={handleEdit}
-                onHooks={onViewHooks}
                 onDriverAction={handleDriverAction}
                 onDelete={handleDelete}
-                onDetail={onViewDetail}
               />
             ))
         }

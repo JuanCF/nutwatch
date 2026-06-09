@@ -4,6 +4,34 @@ import { API } from '../constants';
 import { statusToBadgeClass } from '../utils/service';
 import Badge from './Badge';
 
+function SkeletonDashboard() {
+  return (
+    <>
+      <div className="stat-grid">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="stat-card">
+            <div className="skeleton skeleton-stat-card" />
+          </div>
+        ))}
+      </div>
+      <div className="dashboard-row">
+        <div className="dashboard-card">
+          <div className="skeleton skeleton-title" />
+          <div className="skeleton skeleton-row" />
+          <div className="skeleton skeleton-row" />
+          <div className="skeleton skeleton-row" />
+        </div>
+        <div className="dashboard-card">
+          <div className="skeleton skeleton-title" />
+          <div className="skeleton skeleton-row" />
+          <div className="skeleton skeleton-row" />
+          <div className="skeleton skeleton-row" />
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function Dashboard() {
   const [upsList, setUpsList] = useState([]);
   const [userCount, setUserCount] = useState(null);
@@ -25,6 +53,8 @@ export default function Dashboard() {
     });
     return () => { cancelled = true; };
   }, []);
+
+  if (loading) return <SkeletonDashboard />;
 
   let health, healthClass;
   if (services) {
@@ -51,21 +81,21 @@ export default function Dashboard() {
           <div className="stat-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><line x1="6" y1="11" x2="6" y2="13"/></svg>
           </div>
-          <div className="stat-value">{loading ? '-' : upsList.length}</div>
+          <div className="stat-value">{upsList.length}</div>
           <div className="stat-label">UPS Devices</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </div>
-          <div className="stat-value">{loading ? '-' : userCount != null ? userCount : '?'}</div>
+          <div className="stat-value">{userCount != null ? userCount : '?'}</div>
           <div className="stat-label">Users</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           </div>
-          <div className="stat-value">{loading ? '-' : activeCount != null ? activeCount + '/' + totalCount : '?'}</div>
+          <div className="stat-value">{activeCount != null ? activeCount + '/' + totalCount : '?'}</div>
           <div className="stat-label">Active Services</div>
         </div>
         <div className="stat-card">
@@ -81,7 +111,7 @@ export default function Dashboard() {
         <div className="dashboard-card">
           <h3>UPS Overview</h3>
           <div className="dash-list">
-            {loading ? <div className="empty">Loading...</div> : upsList.length === 0 ? <div className="empty">No UPS devices configured.</div> : upsList.map(u => (
+            {upsList.length === 0 ? <div className="empty">No UPS devices configured.</div> : upsList.map(u => (
               <div key={u.name} className="dash-ups-item">
                 <span className="dash-ups-name">{u.name}</span>
                 <Badge status={u.status} />
@@ -92,7 +122,7 @@ export default function Dashboard() {
         <div className="dashboard-card">
           <h3>Services</h3>
           <div className="dash-list">
-            {loading ? <div className="empty">Loading...</div> : !services ? <div className="empty">Failed to load services</div> : Object.entries(services).map(([svc, info]) => {
+            {!services ? <div className="empty">Failed to load services</div> : Object.entries(services).map(([svc, info]) => {
               const cls = statusToBadgeClass(info);
               return (
                 <div key={svc} className="dash-svc-item">

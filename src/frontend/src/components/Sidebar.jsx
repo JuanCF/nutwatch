@@ -1,4 +1,5 @@
-import { SECTIONS, APP_VERSION } from '../constants';
+import { NavLink } from 'react-router-dom';
+import { APP_VERSION } from '../constants';
 import { useTheme } from '../theme';
 import { useModal } from './Modal';
 import ThemeSettings from './ThemeSettings';
@@ -81,15 +82,15 @@ const GearIcon = () => (
 );
 
 const NAV_ITEMS = [
-  { id: SECTIONS.DASHBOARD, label: 'Dashboard', Icon: DashboardIcon },
-  { id: SECTIONS.UPS, label: 'UPS Devices', Icon: UpsIcon },
-  { id: SECTIONS.USERS, label: 'Users', Icon: UsersIcon },
-  { id: SECTIONS.NOTIFICATIONS, label: 'Notifications', Icon: NotificationsIcon },
-  { id: SECTIONS.LOGS, label: 'Logs', Icon: LogsIcon },
-  { id: SECTIONS.CONFIG, label: 'Config Files', Icon: ConfigIcon },
+  { to: '/', label: 'Dashboard', Icon: DashboardIcon, end: true },
+  { to: '/ups', label: 'UPS Devices', Icon: UpsIcon },
+  { to: '/users', label: 'Users', Icon: UsersIcon },
+  { to: '/notifications', label: 'Notifications', Icon: NotificationsIcon },
+  { to: '/logs', label: 'Logs', Icon: LogsIcon },
+  { to: '/config', label: 'Config Files', Icon: ConfigIcon },
 ];
 
-export default function Sidebar({ active, onNavigate }) {
+export default function Sidebar({ onNavigate }) {
   const { theme, toggleTheme } = useTheme();
   const { openModal } = useModal();
 
@@ -107,15 +108,17 @@ export default function Sidebar({ active, onNavigate }) {
         </div>
       </div>
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            className={active === id ? 'active' : ''}
-            onClick={() => onNavigate(id)}
+        {NAV_ITEMS.map(({ to, label, Icon, end }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            className={({ isActive }) => isActive ? 'active' : ''}
+            onClick={onNavigate}
           >
             <Icon />
             <span>{label}</span>
-          </button>
+          </NavLink>
         ))}
       </nav>
       <div className="sidebar-footer">

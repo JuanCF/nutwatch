@@ -51,6 +51,13 @@ export function ThemeProvider({ children }) {
   }, [theme]);
 
   useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.content = theme === 'dark' ? '#0a0c10' : '#f1f5f9';
+    }
+  }, [theme]);
+
+  useEffect(() => {
     persistConfig(config);
   }, [config]);
 

@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
+import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import UpsDevices from './components/UpsDevices';
@@ -8,67 +9,91 @@ import Logs from './components/Logs';
 import ConfigFiles from './components/ConfigFiles';
 import HooksSection from './components/HooksSection';
 import UpsDetail from './components/UpsDetail';
-import { ThemeProvider } from './theme';
+import ErrorBoundary from './components/ErrorBoundary';
+import { ThemeProvider, useTheme } from './theme';
 import { ModalProvider } from './components/Modal';
 import { ConfirmProvider } from './components/ConfirmDialog';
-import { SECTIONS, SECTION_TITLES } from './constants';
-import './App.css';
 
-export default function App() {
-  const [section, setSection] = useState(SECTIONS.DASHBOARD);
+const TITLES = {
+  '/': 'Dashboard',
+  '/ups': 'UPS Devices',
+  '/users': 'Users',
+  '/notifications': 'Notifications',
+  '/logs': 'Logs',
+  '/config': 'Config Files',
+};
+
+function getTitle(pathname) {
+  if (TITLES[pathname]) return TITLES[pathname];
+  if (pathname.startsWith('/ups/') && pathname.endsWith('/hooks')) return 'Hooks';
+  if (pathname.startsWith('/ups/')) return 'UPS Detail';
+  return 'NutWatch';
+}
+
+function ThemeColorUpdater() {
+  const { theme } = useTheme();
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    meta.content = theme === 'dark' ? '#0a0c10' : '#f1f5f9';
+  }
+  return null;
+}
+
+function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentHooksUps, setCurrentHooksUps] = useState('');
-  const [currentDetailUps, setCurrentDetailUps] = useState('');
-
-  const showSection = useCallback((id) => {
-    setSection(id);
-    setSidebarOpen(false);
-  }, []);
+  const location = useLocation();
+  const title = getTitle(location.pathname);
 
   return (
+    <ConfirmProvider>
+      <ModalProvider>
+        <ThemeColorUpdater />
+        <div className={`app ${sidebarOpen ? 'sidebar-open' : ''}`}>
+          <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+          <Sidebar onNavigate={() => setSidebarOpen(false)} />
+          <main className="main">
+            <div className="main-header">
+              <button
+                className="sidebar-toggle"
+                onClick={() => setSidebarOpen(v => !v)}
+                aria-label="Toggle navigation"
+                aria-expanded={sidebarOpen}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="6" x2="21" y2="6"/>
+                  <line x1="3" y1="12" x2="21" y2="12"/>
+                  <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+              </button>
+              <h2 id="page-title">{title}</h2>
+            </div>
+            <div className="content">
+              <ErrorBoundary>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/ups" element={<UpsDevices />} />
+                  <Route path="/ups/:name" element={<UpsDetail />} />
+                  <Route path="/ups/:name/hooks" element={<HooksSection />} />
+                  <Route path="/users" element={<Users />} />
+                  <Route path="/notifications" element={<Notifications />} />
+                  <Route path="/logs" element={<Logs />} />
+                  <Route path="/config" element={<ConfigFiles />} />
+                </Routes>
+              </ErrorBoundary>
+            </div>
+          </main>
+        </div>
+      </ModalProvider>
+    </ConfirmProvider>
+  );
+}
+
+export default function App() {
+  return (
     <ThemeProvider>
-      <ConfirmProvider>
-        <ModalProvider>
-          <div className={`app ${sidebarOpen ? 'sidebar-open' : ''}`}>
-            <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
-            <Sidebar active={section} onNavigate={showSection} />
-            <main className="main">
-              <div className="main-header">
-                <button className="sidebar-toggle" onClick={() => setSidebarOpen(v => !v)}>
-                  &#9776;
-                </button>
-                <h2 id="page-title">{SECTION_TITLES[section] || 'Dashboard'}</h2>
-              </div>
-              <div className="content">
-                <div className={`section ${section === SECTIONS.DASHBOARD ? 'active' : ''}`}>
-                  {section === SECTIONS.DASHBOARD && <Dashboard />}
-                </div>
-                <div className={`section ${section === SECTIONS.UPS ? 'active' : ''}`}>
-                  {section === SECTIONS.UPS && <UpsDevices onViewHooks={(name) => { setCurrentHooksUps(name); setSection(SECTIONS.HOOKS); }} onViewDetail={(name) => { setCurrentDetailUps(name); setSection(SECTIONS.UPS_DETAIL); }} />}
-                </div>
-                <div className={`section ${section === SECTIONS.USERS ? 'active' : ''}`}>
-                  {section === SECTIONS.USERS && <Users />}
-                </div>
-                <div className={`section ${section === SECTIONS.NOTIFICATIONS ? 'active' : ''}`}>
-                  {section === SECTIONS.NOTIFICATIONS && <Notifications />}
-                </div>
-                <div className={`section ${section === SECTIONS.LOGS ? 'active' : ''}`}>
-                  {section === SECTIONS.LOGS && <Logs />}
-                </div>
-                <div className={`section ${section === SECTIONS.CONFIG ? 'active' : ''}`}>
-                  {section === SECTIONS.CONFIG && <ConfigFiles />}
-                </div>
-                <div className={`section ${section === SECTIONS.HOOKS ? 'active' : ''}`}>
-                  {section === SECTIONS.HOOKS && <HooksSection upsname={currentHooksUps} onBack={() => showSection(SECTIONS.UPS)} />}
-                </div>
-                <div className={`section ${section === SECTIONS.UPS_DETAIL ? 'active' : ''}`}>
-                  {section === SECTIONS.UPS_DETAIL && <UpsDetail upsname={currentDetailUps} onBack={() => showSection(SECTIONS.UPS)} />}
-                </div>
-              </div>
-            </main>
-          </div>
-        </ModalProvider>
-      </ConfirmProvider>
+      <HashRouter>
+        <AppLayout />
+      </HashRouter>
     </ThemeProvider>
   );
 }
