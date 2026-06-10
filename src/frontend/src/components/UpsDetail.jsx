@@ -98,11 +98,17 @@ export default function UpsDetail() {
   useEffect(() => {
     if (!live) return;
     const ac = new AbortController();
-    const id = setInterval(() => {
+    const fetching = { current: false };
+    const poll = () => {
+      if (fetching.current) return;
+      fetching.current = true;
       api(API.upsDetail(upsname), { signal: ac.signal })
-        .then(d => { if (d) setDetail(d); })
-        .catch(() => {});
-    }, 10000);
+        .then(d => { if (d) { setDetail(d); setError(null); } })
+        .catch(() => {})
+        .finally(() => { fetching.current = false; });
+    };
+    const id = setInterval(poll, 10000);
+    poll();
     intervalRef.current = id;
     return () => {
       ac.abort();

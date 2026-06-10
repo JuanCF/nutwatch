@@ -5,6 +5,7 @@ async function fetchWithRetry(url, opts, retries = 2) {
       if (res.ok || (res.status < 429 && (res.status < 500 || res.status >= 600))) return res;
       if (i === retries) return res;
     } catch (e) {
+      if (e?.name === 'AbortError') throw e;
       if (i === retries) throw e;
     }
     await new Promise(r => setTimeout(r, 1000 * (i + 1)));

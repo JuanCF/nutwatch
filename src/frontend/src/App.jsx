@@ -58,7 +58,7 @@ function AppLayout() {
               <h2 id="page-title">{title}</h2>
             </div>
             <div className="content">
-              <ErrorBoundary>
+              <ErrorBoundary key={location.pathname}>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/ups" element={<UpsDevices />} />
