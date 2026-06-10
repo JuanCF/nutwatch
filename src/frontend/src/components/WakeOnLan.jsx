@@ -279,9 +279,11 @@ export default function WakeOnLan() {
                       <td>{targets[name].broadcast || '255.255.255.255'}</td>
                       <td>{targets[name].description || '-'}</td>
                       <td>
-                        <button className="secondary" onClick={() => handleWake(name)}>Wake Now</button>
-                        <button className="secondary" onClick={() => handleEditTarget({ name, ...targets[name] })}>Edit</button>
-                        <button className="secondary danger" onClick={() => handleDeleteTarget(name)}>Delete</button>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <button className="secondary" onClick={() => handleWake(name)}>Wake Now</button>
+                          <button className="secondary" onClick={() => handleEditTarget({ name, ...targets[name] })}>Edit</button>
+                          <button className="secondary danger" onClick={() => handleDeleteTarget(name)}>Delete</button>
+                        </div>
                       </td>
                     </tr>
                   ))

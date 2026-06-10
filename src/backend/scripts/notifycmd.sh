@@ -2,6 +2,7 @@
 # NUT notifycmd -- sample script.
 # Environment: UPSNAME, NOTIFYTYPE (set by upsmon).
 # Place per-UPS hooks in /etc/nut/notify.d/<UPSNAME>_<EVENT>.sh
+# WOL auto-dispatch runs after the user hook via nutwatch-wol-dispatch.
 
 LOGFILE="/var/log/nut/notifycmd.log"
 HOOKDIR="/etc/nut/notify.d"
