@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover
     Flask = _FakeFlask
 
 from config import NUTWATCH_HOST, NUTWATCH_PORT
-from routes import ups_bp, users_bp, upsmon_bp, hooks_bp, system_bp, logs_bp
+from routes import ups_bp, users_bp, upsmon_bp, hooks_bp, system_bp, logs_bp, wol_bp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("nutwatch")
@@ -33,6 +33,7 @@ def create_app():
     app.register_blueprint(hooks_bp)
     app.register_blueprint(system_bp)
     app.register_blueprint(logs_bp)
+    app.register_blueprint(wol_bp)
 
     @app.route("/")
     def index():

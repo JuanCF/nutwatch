@@ -622,6 +622,7 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 UPSNAME_BARE="${UPSNAME%%@*}"
 echo "[$TIMESTAMP] UPS=$UPSNAME EVENT=$NOTIFYTYPE" >>"$LOGFILE"
 [[ -x "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" ]] && "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" >>"$LOGFILE" 2>&1
+[[ -x "/usr/local/bin/nutwatch-wol-dispatch" ]] && "/usr/local/bin/nutwatch-wol-dispatch" "$UPSNAME_BARE" "$NOTIFYTYPE" >>"$LOGFILE" 2>&1
 NOTIFY_EOF
 
   #-----------------------------------------------------------------
@@ -704,7 +705,6 @@ SERVICE_EOF
   vc_cmd+=(--run-command "mkdir -p /etc/nut/notify.d /var/log/nut")
   vc_cmd+=(--run-command "chown root:nut /etc/nut/notify.d && chmod 750 /etc/nut/notify.d")
   vc_cmd+=(--run-command "chown nut:nut /var/log/nut")
-
   # Set permissions
   vc_cmd+=(--run-command 'chown root:nut /etc/nut/*.conf && chmod 640 /etc/nut/*.conf')
   vc_cmd+=(--run-command 'mkdir -p /var/run/nut && chown nut:nut /var/run/nut')
@@ -747,7 +747,8 @@ SERVICE_EOF
     python3 -m venv /opt/nutwatch/venv && \
     /opt/nutwatch/venv/bin/pip install -q -r /opt/nutwatch/requirements.txt && \
     cp /opt/nutwatch/nutwatch.service /etc/systemd/system/ && \
-    systemctl enable nutwatch || \
+    systemctl enable nutwatch && \
+    cp /opt/nutwatch/scripts/nutwatch-wol-dispatch /usr/local/bin/nutwatch-wol-dispatch && chmod 755 /usr/local/bin/nutwatch-wol-dispatch || \
     echo "[WARN] NutWatch installation failed, continuing"
   ')
 

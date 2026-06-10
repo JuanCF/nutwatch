@@ -12,6 +12,7 @@ from parsers.monitor import (
 )
 from parsers.nut_scanner import parse_nut_scanner_output
 from services.hooks import delete_hook, list_hooks
+from services.wol import cleanup_for_ups
 from utils import read_file, write_file, run_cmd, ups_status, ups_variables, stop_driver_and_cleanup
 
 DEFAULT_POLLINTERVAL = "5"
@@ -178,6 +179,9 @@ def delete_ups(name: str) -> bool:
     # Clean up per-UPS hook scripts
     for event in list_hooks(name):
         delete_hook(name, event)
+
+    # Clean up WOL event mappings
+    cleanup_for_ups(name)
 
     return True
 
