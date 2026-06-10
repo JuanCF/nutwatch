@@ -747,9 +747,10 @@ SERVICE_EOF
     python3 -m venv /opt/nutwatch/venv && \
     /opt/nutwatch/venv/bin/pip install -q -r /opt/nutwatch/requirements.txt && \
     cp /opt/nutwatch/nutwatch.service /etc/systemd/system/ && \
-    systemctl enable nutwatch && \
+    systemctl enable nutwatch || \
+    echo "[WARN] NutWatch enablement failed, continuing"
     cp /opt/nutwatch/scripts/nutwatch-wol-dispatch /usr/local/bin/nutwatch-wol-dispatch && chmod 755 /usr/local/bin/nutwatch-wol-dispatch || \
-    echo "[WARN] NutWatch installation failed, continuing"
+    echo "[WARN] WOL helper installation failed, continuing"
   ')
 
   # System bootstrap

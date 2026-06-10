@@ -1,5 +1,6 @@
 #!/opt/nutwatch/venv/bin/python3
 import sys
+import traceback
 
 sys.path.insert(0, "/opt/nutwatch")
 from services.wol import dispatch
@@ -8,4 +9,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         sys.exit(1)
     upsname, event = sys.argv[1], sys.argv[2]
-    dispatch(upsname, event)
+    try:
+        dispatch(upsname, event)
+    except Exception:
+        print("WOL dispatch failed:", traceback.format_exc(), file=sys.stderr)
+        sys.exit(1)

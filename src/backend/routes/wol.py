@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 
 from auth import require_admin
+from config import IDENTIFIER_REGEX
 from services import wol as wol_service
 
 wol_bp = Blueprint("wol", __name__)
@@ -21,6 +22,8 @@ def create_target():
     mac = data.get("mac", "").strip()
     if not name:
         return jsonify({"error": "name is required"}), 400
+    if not IDENTIFIER_REGEX.match(name):
+        return jsonify({"error": "invalid name format"}), 400
     if not mac:
         return jsonify({"error": "mac is required"}), 400
     try:
@@ -40,6 +43,8 @@ def create_target():
 @wol_bp.route("/api/wol/targets/<name>", methods=["PUT"])
 @require_admin
 def update_target(name):
+    if not IDENTIFIER_REGEX.match(name):
+        return jsonify({"error": "invalid name format"}), 400
     data = request.get_json(force=True) or {}
     try:
         target = wol_service.update_target(
@@ -58,6 +63,8 @@ def update_target(name):
 @wol_bp.route("/api/wol/targets/<name>", methods=["DELETE"])
 @require_admin
 def delete_target(name):
+    if not IDENTIFIER_REGEX.match(name):
+        return jsonify({"error": "invalid name format"}), 400
     if not wol_service.delete_target(name):
         return jsonify({"error": "not found"}), 404
     return jsonify({"ok": True})
@@ -66,6 +73,8 @@ def delete_target(name):
 @wol_bp.route("/api/wol/targets/<name>/wake", methods=["POST"])
 @require_admin
 def wake_target(name):
+    if not IDENTIFIER_REGEX.match(name):
+        return jsonify({"error": "invalid name format"}), 400
     try:
         wol_service.send_wol(name)
     except ValueError as e:
@@ -98,6 +107,8 @@ def create_mapping():
     targets = data.get("targets", [])
     if not ups:
         return jsonify({"error": "ups is required"}), 400
+    if not IDENTIFIER_REGEX.match(ups):
+        return jsonify({"error": "ups must match IDENTIFIER_REGEX"}), 400
     if not event:
         return jsonify({"error": "event is required"}), 400
     if not isinstance(targets, list) or len(targets) == 0:

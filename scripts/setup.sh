@@ -436,15 +436,15 @@ install_nutwatch() {
   chown root:nut /etc/nut/notify.d && chmod 750 /etc/nut/notify.d
   chown nut:nut /var/log/nut
 
-  # Install WOL dispatch helper
+  info "Setting up Python virtual environment..."
+  python3 -m venv "$NUTWATCH_DIR/venv"
+  "$NUTWATCH_DIR/venv/bin/pip" install --quiet -r "$NUTWATCH_DIR/requirements.txt"
+
+  # Install WOL dispatch helper (after venv so shebang is valid)
   if [[ -f "$NUTWATCH_DIR/scripts/nutwatch-wol-dispatch" ]]; then
     cp "$NUTWATCH_DIR/scripts/nutwatch-wol-dispatch" /usr/local/bin/nutwatch-wol-dispatch
     chmod 755 /usr/local/bin/nutwatch-wol-dispatch
   fi
-
-  info "Setting up Python virtual environment..."
-  python3 -m venv "$NUTWATCH_DIR/venv"
-  "$NUTWATCH_DIR/venv/bin/pip" install --quiet -r "$NUTWATCH_DIR/requirements.txt"
 
   if [[ -n "${NUTWATCH_API_KEY:-}" ]]; then
     mkdir -p /etc/nutwatch

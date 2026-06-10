@@ -51,19 +51,19 @@ function TargetModal({ target, onSaved }) {
     <>
       <h3>{isEdit ? 'Edit Target' : 'Add Target'}</h3>
       {error && <div className="error">{error}</div>}
-      <div className="form-group">
+      <div className="field">
         <label>Name</label>
         <input type="text" value={name} onChange={e => setName(e.target.value)} disabled={isEdit} />
       </div>
-      <div className="form-group">
+      <div className="field">
         <label>MAC Address</label>
         <input type="text" value={mac} onChange={e => setMac(e.target.value)} placeholder="AA:BB:CC:DD:EE:FF" />
       </div>
-      <div className="form-group">
+      <div className="field">
         <label>Broadcast Address</label>
         <input type="text" value={broadcast} onChange={e => setBroadcast(e.target.value)} placeholder="255.255.255.255" />
       </div>
-      <div className="form-group">
+      <div className="field">
         <label>Description</label>
         <input type="text" value={description} onChange={e => setDescription(e.target.value)} />
       </div>
@@ -116,19 +116,19 @@ function MappingModal({ upsList, targets, mapping, onSaved }) {
     <>
       <h3>Add Event Mapping</h3>
       {error && <div className="error">{error}</div>}
-      <div className="form-group">
+      <div className="field">
         <label>UPS</label>
         <select value={ups} onChange={e => setUps(e.target.value)}>
           {upsList.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
       </div>
-      <div className="form-group">
+      <div className="field">
         <label>Event</label>
         <select value={event} onChange={e => setEvent(e.target.value)}>
           {NOTIFICATION_EVENTS.map(evt => <option key={evt} value={evt}>{evt}</option>)}
         </select>
       </div>
-      <div className="form-group">
+      <div className="field">
         <label>Targets</label>
         {targetNames.length === 0
           ? <p className="empty">No targets configured. Add targets first.</p>
@@ -312,7 +312,7 @@ export default function WakeOnLan() {
                     <tr key={i}>
                       <td>{i + 1}</td>
                       <td>{m.ups}</td>
-                      <td><span className="badge online">{m.event}</span></td>
+                      <td><span className={`badge ${({ ONLINE: 'success', ONBATT: 'warning', LOWBATT: 'error', COMMBAD: 'danger', COMMOK: 'success', SHUTDOWN: 'error', REPLBATT: 'warning', NOCOMM: 'danger', NOPARENT: 'neutral' }[m.event]) || 'neutral'}`}>{m.event}</span></td>
                       <td>{m.targets.join(', ')}</td>
                       <td>
                         <button className="secondary danger" onClick={() => handleDeleteMapping(i)}>Delete</button>

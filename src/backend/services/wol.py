@@ -108,9 +108,9 @@ def send_wol(name: str) -> bool:
     try:
         from wakeonlan import send_magic_packet
     except ImportError:
-        logger.error("wakeonlan Python package is not installed")
-        raise RuntimeError("wakeonlan package is not installed")
-    send_magic_packet(target["mac"], ip_address=target.get("broadcast", "255.255.255.255"))
+        logger.exception("wakeonlan Python package is not installed")
+        raise RuntimeError("wakeonlan package is not installed") from None
+    send_magic_packet(target["mac"], ip_address=target.get("broadcast", "255.255.255.255"), port=9)
     logger.info("Sent WOL magic packet to %s (%s) via %s", name, target["mac"], target.get("broadcast", "255.255.255.255"))
     return True
 
@@ -118,7 +118,7 @@ def send_wol(name: str) -> bool:
 def wake_all() -> dict:
     targets = list_targets()
     results = {}
-    for name, target in targets.items():
+    for name in targets:
         try:
             send_wol(name)
             results[name] = "ok"
@@ -171,7 +171,7 @@ def dispatch(upsname: str, event: str) -> None:
                 try:
                     send_wol(target_name)
                 except Exception as e:
-                    logger.error("WOL dispatch failed for %s/%s -> %s: %s", upsname, event, target_name, e)
+                    logger.exception("WOL dispatch failed for %s/%s -> %s", upsname, event, target_name)
 
 
 def cleanup_for_ups(upsname: str) -> None:
