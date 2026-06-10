@@ -1,0 +1,108 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+h2 {
+  margin: 0 0 1.25rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+h2::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 1rem;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+h3 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.section {
+  display: none;
+  animation: fade-in 200ms ease;
+}
+
+.section.active {
+  display: block;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes skeleton-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.skeleton {
+  background: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-stat-card { height: 100px; }
+.skeleton-row { height: 2.5rem; margin-bottom: 0.5rem; }
+.skeleton-text { height: 0.85rem; width: 70%; margin-bottom: 0.35rem; }
+.skeleton-title { height: 1.1rem; width: 40%; margin-bottom: 0.5rem; }
+.skeleton-badge { height: 1.4rem; width: 4.5rem; border-radius: 20px; }
+.skeleton-metric-bar { height: 4px; width: 100%; margin: 0.5rem 0; }
+.skeleton-card { height: 180px; }
+
+.table-wrapper {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  max-width: 100%;
+  position: relative;
+}
+
+.table-wrapper::after {
+  content: "";
+  position: sticky;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  background: linear-gradient(to right, transparent, var(--surface));
+  pointer-events: none;
+  flex-shrink: 0;
+}

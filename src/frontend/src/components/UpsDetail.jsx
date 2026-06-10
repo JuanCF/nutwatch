@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { API } from '../constants';
 import { formatRuntime } from '../utils/format';
@@ -38,11 +39,41 @@ const GROUPS = [
   { prefix: 'driver', label: 'Driver' },
 ];
 
-export default function UpsDetail({ upsname, onBack }) {
+function SkeletonDetail() {
+  return (
+    <>
+      <div className="detail-header">
+        <div className="detail-title">
+          <div className="skeleton skeleton-title" style={{ width: '180px' }} />
+          <div className="skeleton skeleton-badge" />
+        </div>
+        <div className="skeleton" style={{ width: '150px', height: '32px' }} />
+      </div>
+      <div className="detail-grid">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="detail-section">
+            <div className="skeleton skeleton-text" style={{ width: '80px', marginBottom: '0.85rem' }} />
+            <div className="skeleton skeleton-row" />
+            <div className="skeleton skeleton-row" />
+            <div className="skeleton skeleton-row" />
+            <div className="skeleton skeleton-row" style={{ borderBottom: 'none' }} />
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+export default function UpsDetail() {
+  const { name } = useParams();
+  const navigate = useNavigate();
+  const upsname = decodeURIComponent(name);
   const [detail, setDetail] = useState(null);
   const [ups, setUps] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [live, setLive] = useState(true);
+  const intervalRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,14 +95,35 @@ export default function UpsDetail({ upsname, onBack }) {
     return () => { cancelled = true; };
   }, [upsname]);
 
+  useEffect(() => {
+    if (!live) return;
+    const ac = new AbortController();
+    const fetching = { current: false };
+    const poll = () => {
+      if (fetching.current) return;
+      fetching.current = true;
+      api(API.upsDetail(upsname), { signal: ac.signal })
+        .then(d => { if (d) { setDetail(d); setError(null); } })
+        .catch(() => {})
+        .finally(() => { fetching.current = false; });
+    };
+    const id = setInterval(poll, 10000);
+    poll();
+    intervalRef.current = id;
+    return () => {
+      ac.abort();
+      clearInterval(id);
+    };
+  }, [live, upsname]);
+
   if (loading) {
     return (
       <>
         <div className="detail-header">
           <h2>{upsname}</h2>
-          <button className="secondary" onClick={onBack}>Back</button>
+          <button className="secondary" onClick={() => navigate('/ups')}>Back</button>
         </div>
-        <div className="empty">Loading telemetry...</div>
+        <SkeletonDetail />
       </>
     );
   }
@@ -81,7 +133,7 @@ export default function UpsDetail({ upsname, onBack }) {
       <>
         <div className="detail-header">
           <h2>{upsname}</h2>
-          <button className="secondary" onClick={onBack}>Back to UPS Devices</button>
+          <button className="secondary" onClick={() => navigate('/ups')}>Back to UPS Devices</button>
         </div>
         <div className="empty">{error || 'No telemetry data available'}</div>
       </>
@@ -101,8 +153,15 @@ export default function UpsDetail({ upsname, onBack }) {
         <div className="detail-title">
           <h2>{upsname}</h2>
           {ups?.status && <Badge status={ups.status} />}
+          <button
+            className={`secondary detail-live-toggle ${live ? '' : 'paused'}`}
+            onClick={() => setLive(v => !v)}
+          >
+            <span className={`live-dot ${live ? 'active' : 'paused'}`} />
+            {live ? 'Live' : 'Paused'}
+          </button>
         </div>
-        <button className="secondary" onClick={onBack}>Back to UPS Devices</button>
+        <button className="secondary" onClick={() => navigate('/ups')}>Back to UPS Devices</button>
       </div>
 
       <div className="detail-grid">

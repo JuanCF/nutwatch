@@ -1,7 +1,9 @@
+import { useNavigate } from 'react-router-dom';
 import Badge from './Badge';
 import { formatRuntime } from '../utils/format';
 
-export default function UpsCard({ ups, detail, onEdit, onHooks, onDriverAction, onDelete, onDetail }) {
+export default function UpsCard({ ups, detail, onEdit, onDriverAction, onDelete }) {
+  const navigate = useNavigate();
   const dirs = (ups.directives || []).map(d => d[0] + '=' + d[1]).join(', ');
 
   const charge = detail?.['battery.charge'];
@@ -15,7 +17,7 @@ export default function UpsCard({ ups, detail, onEdit, onHooks, onDriverAction, 
   const loadColor = load >= 80 ? 'var(--red)' : load >= 60 ? 'var(--orange)' : 'var(--accent)';
 
   return (
-    <div className="card clickable" onClick={() => onDetail(ups.name)}>
+    <div className="card clickable" onClick={() => navigate('/ups/' + encodeURIComponent(ups.name))}>
       <h3>{ups.name} <Badge status={ups.status} /></h3>
       <div className="meta">driver: {ups.driver || '-'}</div>
       <div className="meta">port: {ups.port || '-'}</div>
@@ -45,7 +47,7 @@ export default function UpsCard({ ups, detail, onEdit, onHooks, onDriverAction, 
       </div>
       <div className="actions">
         <button className="secondary" onClick={(e) => { e.stopPropagation(); onEdit(ups); }}>Edit</button>
-        <button className="secondary" onClick={(e) => { e.stopPropagation(); onHooks(ups.name); }}>Hooks</button>
+        <button className="secondary" onClick={(e) => { e.stopPropagation(); navigate('/ups/' + encodeURIComponent(ups.name) + '/hooks'); }}>Hooks</button>
         <button className="secondary" onClick={(e) => { e.stopPropagation(); onDriverAction(ups.name, 'start'); }}>Start driver</button>
         <button className="secondary" onClick={(e) => { e.stopPropagation(); onDriverAction(ups.name, 'stop'); }}>Stop driver</button>
         <button className="secondary danger" onClick={(e) => { e.stopPropagation(); onDelete(ups.name); }}>Delete</button>

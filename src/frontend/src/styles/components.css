@@ -1,82 +1,3 @@
-:root {
-  --bg: #0a0c10;
-  --surface: #11141b;
-  --surface-hover: #181c27;
-  --surface-raised: #1e2330;
-  --border: #252b3a;
-  --border-subtle: #1a1f2b;
-  --text: #e2e8f0;
-  --text-secondary: #8892a8;
-  --text-muted: #5c6477;
-  --accent: #818cf8;
-  --accent-dim: rgba(129, 140, 248, 0.12);
-  --accent-glow: rgba(129, 140, 248, 0.35);
-  --green: #34d399;
-  --green-dim: rgba(52, 211, 153, 0.12);
-  --yellow: #fbbf24;
-  --yellow-dim: rgba(251, 191, 36, 0.12);
-  --red: #f87171;
-  --red-dim: rgba(248, 113, 113, 0.12);
-  --orange: #fb923c;
-  --blue: #60a5fa;
-  --header-bg: rgba(10, 12, 16, 0.85);
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: "SFMono-Regular", "Consolas", "Liberation Mono", "Menlo", "Courier New", monospace;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
-  --shadow-glow: 0 0 20px var(--accent-glow);
-  --transition: 150ms ease;
-}
-
-[data-theme="light"] {
-  --bg: #f1f5f9;
-  --surface: #ffffff;
-  --surface-hover: #f8fafc;
-  --surface-raised: #ffffff;
-  --border: #cbd5e1;
-  --border-subtle: #e2e8f0;
-  --text: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --accent: #6366f1;
-  --accent-dim: rgba(99, 102, 241, 0.1);
-  --accent-glow: rgba(99, 102, 241, 0.25);
-  --green: #16a34a;
-  --green-dim: rgba(22, 163, 74, 0.1);
-  --yellow: #ca8a04;
-  --yellow-dim: rgba(202, 138, 4, 0.1);
-  --red: #dc2626;
-  --red-dim: rgba(220, 38, 38, 0.12);
-  --orange: #ea580c;
-  --blue: #2563eb;
-  --header-bg: rgba(255, 255, 255, 0.85);
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
-  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.2);
-}
-
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  font-size: 14px;
-  line-height: 1.5;
-  min-height: 100vh;
-}
-
-/* ─── App Layout ─── */
-.app {
-  display: flex;
-  min-height: 100vh;
-}
-
 /* ─── Sidebar ─── */
 .sidebar {
   width: 240px;
@@ -138,7 +59,7 @@ html, body {
   gap: 0.25rem;
 }
 
-.sidebar-nav button {
+.sidebar-nav a {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -154,30 +75,31 @@ html, body {
   text-align: left;
   width: 100%;
   font-family: var(--font);
+  text-decoration: none;
 }
 
-.sidebar-nav button svg {
+.sidebar-nav a svg {
   flex-shrink: 0;
   opacity: 0.7;
   transition: opacity var(--transition);
 }
 
-.sidebar-nav button:hover {
+.sidebar-nav a:hover {
   background: var(--surface-hover);
   color: var(--text);
 }
 
-.sidebar-nav button:hover svg {
+.sidebar-nav a:hover svg {
   opacity: 1;
 }
 
-.sidebar-nav button.active {
+.sidebar-nav a.active {
   background: var(--accent-dim);
   color: var(--accent);
   box-shadow: 0 0 0 1px rgba(129,140,248,0.15);
 }
 
-.sidebar-nav button.active svg {
+.sidebar-nav a.active svg {
   opacity: 1;
   stroke: var(--accent);
 }
@@ -313,34 +235,6 @@ html, body {
   max-width: none;
   margin: 0;
   min-width: 0;
-}
-
-/* ─── Typography ─── */
-h2 {
-  margin: 0 0 1.25rem;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-h2::before {
-  content: "";
-  display: inline-block;
-  width: 3px;
-  height: 1rem;
-  background: var(--accent);
-  border-radius: 2px;
-}
-
-h3 {
-  margin: 0 0 1rem;
-  font-size: 1rem;
-  font-weight: 600;
 }
 
 /* ─── Dashboard ─── */
@@ -764,7 +658,6 @@ button.danger:hover {
   flex-wrap: wrap;
 }
 
-/* ─── Card Clickable & Metrics ─── */
 .card.clickable {
   cursor: pointer;
 }
@@ -1092,6 +985,29 @@ textarea#config-editor {
   width: 100%;
 }
 
+.field textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.ups-modal-textarea {
+  height: 80px;
+  font-family: var(--mono);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem;
+  width: 100%;
+  resize: vertical;
+}
+
+.ups-modal-warning {
+  color: var(--yellow);
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -1154,14 +1070,6 @@ textarea#config-editor {
   line-height: 1.5;
 }
 
-/* ─── Empty State ─── */
-.empty {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  padding: 2rem;
-  text-align: center;
-}
-
 /* ─── Field Grid ─── */
 .field-grid {
   display: grid;
@@ -1195,7 +1103,6 @@ textarea#config-editor {
   max-width: 100%;
 }
 
-/* Ensure inputs inside tables shrink on small screens */
 #notify-monitors-table input:not([type="checkbox"]),
 #notify-monitors-table select,
 #notify-events-table input:not([type="checkbox"]) {
@@ -1205,26 +1112,6 @@ textarea#config-editor {
 
 #notify-events-table td {
   white-space: nowrap;
-}
-
-/* ─── Animations ─── */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.section {
-  display: none;
-  animation: fadeIn 200ms ease;
-}
-
-.section.active {
-  display: block;
-}
-
-/* ─── Sidebar Overlay (mobile only) ─── */
-.sidebar-overlay {
-  display: none;
 }
 
 /* ─── Responsive ─── */
@@ -1390,4 +1277,57 @@ textarea#config-editor {
 
 .settings-hour-row .field {
   flex: 1;
+}
+
+/* ─── Error Boundary ─── */
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.error-boundary .card {
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+}
+
+.error-boundary .card h3 {
+  color: var(--red);
+  margin-bottom: 0.75rem;
+}
+
+.error-boundary .card p {
+  color: var(--text-secondary);
+  margin-bottom: 1.25rem;
+}
+
+/* ─── UPS Detail Live/Pause Toggle ─── */
+.detail-live-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-family: var(--mono);
+}
+
+.detail-live-toggle .live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.detail-live-toggle .live-dot.active {
+  background: var(--green);
+  box-shadow: 0 0 4px var(--green);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.detail-live-toggle .live-dot.paused {
+  background: var(--text-muted);
 }

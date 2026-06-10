@@ -1,11 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { API, NOTIFICATION_EVENTS } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
 import HookEditor from './HookEditor';
 
-export default function HooksSection({ upsname, onBack }) {
+export default function HooksSection() {
+  const { name } = useParams();
+  const navigate = useNavigate();
+  const upsname = decodeURIComponent(name);
   const [hookEvents, setHookEvents] = useState([]);
   const { dangerConfirm, alert } = useConfirm();
   const { openModal, closeModal } = useModal();
@@ -39,7 +43,7 @@ export default function HooksSection({ upsname, onBack }) {
   return (
     <>
       <div className="toolbar" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-        <button className="secondary" onClick={onBack}>&larr; Back to UPS Devices</button>
+        <button className="secondary" onClick={() => navigate('/ups')}>&larr; Back to UPS Devices</button>
         <h2 id="hooks-ups-title" style={{ margin: 0 }}>Hooks for: {upsname}</h2>
         <span></span>
       </div>
