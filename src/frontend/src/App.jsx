@@ -10,7 +10,7 @@ import ConfigFiles from './components/ConfigFiles';
 import HooksSection from './components/HooksSection';
 import UpsDetail from './components/UpsDetail';
 import ErrorBoundary from './components/ErrorBoundary';
-import { ThemeProvider, useTheme } from './theme';
+import { ThemeProvider } from './theme';
 import { ModalProvider } from './components/Modal';
 import { ConfirmProvider } from './components/ConfirmDialog';
 
@@ -30,15 +30,6 @@ function getTitle(pathname) {
   return 'NutWatch';
 }
 
-function ThemeColorUpdater() {
-  const { theme } = useTheme();
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) {
-    meta.content = theme === 'dark' ? '#0a0c10' : '#f1f5f9';
-  }
-  return null;
-}
-
 function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
@@ -47,7 +38,6 @@ function AppLayout() {
   return (
     <ConfirmProvider>
       <ModalProvider>
-        <ThemeColorUpdater />
         <div className={`app ${sidebarOpen ? 'sidebar-open' : ''}`}>
           <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
           <Sidebar onNavigate={() => setSidebarOpen(false)} />

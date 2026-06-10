@@ -97,13 +97,17 @@ export default function UpsDetail() {
 
   useEffect(() => {
     if (!live) return;
+    const ac = new AbortController();
     const id = setInterval(() => {
-      api(API.upsDetail(upsname))
+      api(API.upsDetail(upsname), { signal: ac.signal })
         .then(d => { if (d) setDetail(d); })
         .catch(() => {});
     }, 10000);
     intervalRef.current = id;
-    return () => clearInterval(id);
+    return () => {
+      ac.abort();
+      clearInterval(id);
+    };
   }, [live, upsname]);
 
   if (loading) {

@@ -20,7 +20,7 @@
   --orange: #fb923c;
   --blue: #60a5fa;
   --header-bg: rgba(10, 12, 16, 0.85);
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: -apple-system, "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", sans-serif;
   --mono: "SFMono-Regular", "Consolas", "Liberation Mono", "Menlo", "Courier New", monospace;
   --radius-sm: 6px;
   --radius-md: 10px;
