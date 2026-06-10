@@ -22,6 +22,7 @@ This repository also includes `vm/nut-vm.sh`, a bash script to automatically cre
 - **Per-UPS Event Hooks** — Fine-grained script hooks per UPS per event (ONLINE, ONBATT, LOWBATT, COMMOK, COMMBAD, SHUTDOWN, REPLBATT, NOCOMM, NOPARENT) with in-browser script editor (Tab support), status badges, and instant save/delete
 - **Live Log Streaming** — Real-time SSE log viewer tailing nut-server, nut-monitor, and nut-driver journals with pause/resume, auto-scroll, color-coded lines (error/warn/info), and configurable recent log loading
 - **Config Files** — Raw in-browser editor for ups.conf, upsd.conf, upsmon.conf, and upsd.users (read-only via this endpoint)
+- **Wake on LAN** — Manage WOL targets (MAC, broadcast, description), create event-to-target mappings for automatic wake on UPS events (ONLINE, ONBATT, etc.), manual "Wake Now" and "Wake All" buttons, and non-destructive auto-dispatch via notifycmd.sh
 - **Service Management** — One-click restart (nut-server, nut-monitor, or both) and per-UPS driver start/stop/restart with multi-fallback cleanup (upsdrvctl, systemctl, PID kill, pkill)
 - **Bearer Token Auth** — API authentication via `NUTWATCH_API_KEY` env var; when unset, auth is disabled
 - **Atomic Config Writes** — All file writes use `tempfile` + `os.replace` to prevent corruption
@@ -44,7 +45,7 @@ This repository also includes `vm/nut-vm.sh`, a bash script to automatically cre
 
 ### Notify Script & Hook Samples
 
-- **`notifycmd.sh`** — Central notify dispatcher that logs all UPS events and executes per-UPS per-event hook scripts from `/etc/nut/notify.d/<UPSNAME>_<EVENT>.sh`
+- **`notifycmd.sh`** — Central notify dispatcher that logs all UPS events, executes per-UPS per-event hook scripts from `/etc/nut/notify.d/<UPSNAME>_<EVENT>.sh`, and then triggers WOL auto-dispatch for any matching event mappings
 - **Hook Samples** (`hook-samples/`):
   - `01-test-marker.sh` — Write a marker file when an event fires
   - `02-wall-notification.sh` — Broadcast a `wall` message to all logged-in users
@@ -85,7 +86,7 @@ Proxmox Host
 │   ├── Downloads         │   ├── NUT Server
 │   ├── virt-customize ──►│   │   ├── nut-driver (usbhid-ups)
 │   ├── Creates VM        │   │   ├── upsd (port 3493)
-│   ├── Detects UPS       │   │   ├── upsmon (with notifycmd hooks)
+│   ├── Detects UPS       │   │   ├── upsmon (with notifycmd hooks + WOL dispatch)
 │   └── Configures        │   ├── NutWatch (port 8081)
 │       (offline disk     │   └── cloud-init (network, resize)
 │        modification)    │
@@ -112,21 +113,24 @@ src/backend/
 │   ├── users.py         # User CRUD with password masking
 │   ├── upsmon.py        # Full upsmon.conf read/write with validation
 │   ├── hooks.py         # Per-UPS event hook file management
-│   └── system.py        # Service/driver restart, config file raw I/O
+│   ├── system.py        # Service/driver restart, config file raw I/O
+│   └── wol.py           # WOL target/event registry, magic packet dispatch
 ├── routes/              # Flask blueprints (API endpoints)
 │   ├── ups.py
 │   ├── users.py
 │   ├── upsmon.py
 │   ├── hooks.py
 │   ├── system.py
-│   └── logs.py          # SSE log streaming + recent log fetch
+│   ├── logs.py          # SSE log streaming + recent log fetch
+│   └── wol.py           # WOL target and event-mapping CRUD endpoints
 ├── static/              # Built React SPA (index.html + assets/)
 ├── tests/
 │   └── test_parsers.py  # 25+ parser roundtrip tests
 ├── scripts/
-│   └── notifycmd.sh     # Sample UPS event notify dispatcher
+│   ├── notifycmd.sh          # UPS event notify dispatcher (hooks + WOL)
+│   └── nutwatch-wol-dispatch # WOL auto-dispatch called by notifycmd.sh
 ├── nutwatch.service     # systemd unit file
-└── requirements.txt     # flask, pytest
+└── requirements.txt     # flask, pytest, wakeonlan
 ```
 
 ### Frontend Module Layout
@@ -149,6 +153,7 @@ src/frontend/src/
 │   ├── HooksSection.jsx # Per-UPS event hook table
 │   ├── HookEditor.jsx   # In-browser script editor with Tab support
 │   ├── Logs.jsx         # Live SSE log viewer with pause/auto-scroll
+│   ├── WakeOnLan.jsx    # WOL target registry + event mapping management
 │   ├── ConfigFiles.jsx  # Raw config file editor
 │   ├── ServiceStatus.jsx # Service active/inline status bar
 │   ├── Sidebar.jsx      # Navigation sidebar
@@ -233,6 +238,20 @@ Allowed files: `ups.conf`, `upsd.conf`, `upsmon.conf`, `upsd.users`
 | `GET` | `/api/logs/recent?lines=N` | Recent N lines from NUT journals |
 | `GET` | `/api/logs/stream` | SSE stream tailing nut-server + nut-monitor + nut-driver |
 
+### Wake on LAN
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/wol/targets` | List all WOL targets |
+| `POST` | `/api/wol/targets` | Create a WOL target |
+| `PUT` | `/api/wol/targets/<name>` | Update a WOL target |
+| `DELETE` | `/api/wol/targets/<name>` | Delete a WOL target |
+| `POST` | `/api/wol/targets/<name>/wake` | Send magic packet to target |
+| `POST` | `/api/wol/wake-all` | Send magic packet to all targets |
+| `GET` | `/api/wol/mappings` | List all event mappings |
+| `POST` | `/api/wol/mappings` | Create an event mapping |
+| `DELETE` | `/api/wol/mappings/<id>` | Delete an event mapping |
+
 ---
 
 ## Deployment Options
@@ -275,7 +294,8 @@ sudo NUT_UPS_NAME="myups" NUT_ADMIN_PASS="securepass" AUTO=1 bash scripts/setup.
 - Installs `nut-server`, `nut-client`, `usbutils`
 - Writes all NUT config files (nut.conf, ups.conf, upsd.conf, upsd.users, upsmon.conf)
 - Scans USB for UPS devices (first-boot auto-detection service available)
-- Installs `notifycmd.sh` with per-UPS per-event hook support
+- Installs `notifycmd.sh` with per-UPS per-event hook support and WOL auto-dispatch
+- Installs `nutwatch-wol-dispatch` to `/usr/local/bin/` for event-driven WOL
 - Installs NutWatch web UI on port 8081 with systemd service
 - Enables and starts all NUT services
 - Configures firewall (ufw) rules
@@ -463,6 +483,7 @@ http://<VM_IP>:8081
 - Consider firewall rules to restrict NUT port (3493) access
 - The VM password is set via Proxmox's built-in cloud-init (`qm set --cipassword`)
 - Hook scripts are owned `root:nut` with `750` permissions for secure upsmon execution
+- WOL registry files (`wol.json`, `wol-events.json`) are owned `root:nut` with `640` permissions
 - Config file writes use atomic `tempfile` + `os.replace` to prevent partial writes
 
 ---

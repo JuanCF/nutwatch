@@ -10,6 +10,7 @@ import ConfigFiles from './components/ConfigFiles';
 import HooksSection from './components/HooksSection';
 import UpsDetail from './components/UpsDetail';
 import ErrorBoundary from './components/ErrorBoundary';
+import WakeOnLan from './components/WakeOnLan';
 import { ThemeProvider } from './theme';
 import { ModalProvider } from './components/Modal';
 import { ConfirmProvider } from './components/ConfirmDialog';
@@ -21,6 +22,7 @@ const TITLES = {
   '/notifications': 'Notifications',
   '/logs': 'Logs',
   '/config': 'Config Files',
+  '/wol': 'Wake on LAN',
 };
 
 function getTitle(pathname) {
@@ -68,6 +70,7 @@ function AppLayout() {
                   <Route path="/notifications" element={<Notifications />} />
                   <Route path="/logs" element={<Logs />} />
                   <Route path="/config" element={<ConfigFiles />} />
+                  <Route path="/wol" element={<WakeOnLan />} />
                 </Routes>
               </ErrorBoundary>
             </div>

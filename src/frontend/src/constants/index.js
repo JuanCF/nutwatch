@@ -7,6 +7,7 @@ export const SECTIONS = {
   LOGS: 'logs',
   CONFIG: 'config',
   HOOKS: 'hooks',
+  WOL: 'wol',
 };
 
 export const SECTION_TITLES = {
@@ -18,6 +19,7 @@ export const SECTION_TITLES = {
   [SECTIONS.LOGS]: 'Logs',
   [SECTIONS.CONFIG]: 'Config Files',
   [SECTIONS.HOOKS]: 'Hooks',
+  [SECTIONS.WOL]: 'Wake on LAN',
 };
 
 export const API = {
@@ -37,6 +39,12 @@ export const API = {
   user: (name) => `/users/${encodeURIComponent(name)}`,
   configFile: (filename) => `/config/${encodeURIComponent(filename)}`,
   driver: (name, action) => `/driver/${encodeURIComponent(name)}/${action}`,
+  wolTarget: (name) => `/wol/targets/${encodeURIComponent(name)}`,
+  wolWake: (name) => `/wol/targets/${encodeURIComponent(name)}/wake`,
+  wolMapping: (id) => `/wol/mappings/${encodeURIComponent(id)}`,
+  WOL_TARGETS: '/wol/targets',
+  WOL_MAPPINGS: '/wol/mappings',
+  WOL_WAKE_ALL: '/wol/wake-all',
 };
 
 export const DEFAULTS = {

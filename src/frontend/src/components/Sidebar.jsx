@@ -88,6 +88,7 @@ const NAV_ITEMS = [
   { to: '/notifications', label: 'Notifications', Icon: NotificationsIcon },
   { to: '/logs', label: 'Logs', Icon: LogsIcon },
   { to: '/config', label: 'Config Files', Icon: ConfigIcon },
+  { to: '/wol', label: 'Wake on LAN', Icon: DashboardIcon },
 ];
 
 export default function Sidebar({ onNavigate }) {

@@ -300,6 +300,7 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 UPSNAME_BARE="${UPSNAME%%@*}"
 echo "[$TIMESTAMP] UPS=$UPSNAME EVENT=$NOTIFYTYPE" >>"$LOGFILE"
 [[ -x "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" ]] && "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" >>"$LOGFILE" 2>&1
+[[ -x "/usr/local/bin/nutwatch-wol-dispatch" ]] && "/usr/local/bin/nutwatch-wol-dispatch" "$UPSNAME_BARE" "$NOTIFYTYPE" >>"$LOGFILE" 2>&1
 NOTIFY_EOF
   chmod 750 "$NUT_DIR/notifycmd.sh"
   ok "Wrote notifycmd.sh"
@@ -361,6 +362,19 @@ update_nutwatch() {
   info "Updating Python dependencies..."
   "$NUTWATCH_DIR/venv/bin/pip" install --quiet --upgrade pip
   "$NUTWATCH_DIR/venv/bin/pip" install --quiet -r "$NUTWATCH_DIR/requirements.txt"
+
+  # Update WOL dispatch helper
+  if [[ -f "$NUTWATCH_DIR/scripts/nutwatch-wol-dispatch" ]]; then
+    cp "$NUTWATCH_DIR/scripts/nutwatch-wol-dispatch" /usr/local/bin/nutwatch-wol-dispatch
+    chmod 755 /usr/local/bin/nutwatch-wol-dispatch
+  fi
+
+  # Deploy updated notifycmd.sh
+  if [[ -f "$NUTWATCH_DIR/scripts/notifycmd.sh" ]]; then
+    cp "$NUTWATCH_DIR/scripts/notifycmd.sh" /etc/nut/notifycmd.sh
+    chmod 750 /etc/nut/notifycmd.sh
+    chown root:nut /etc/nut/notifycmd.sh
+  fi
 
   if [[ -n "${NUTWATCH_API_KEY:-}" ]]; then
     mkdir -p /etc/nutwatch
@@ -425,6 +439,12 @@ install_nutwatch() {
   info "Setting up Python virtual environment..."
   python3 -m venv "$NUTWATCH_DIR/venv"
   "$NUTWATCH_DIR/venv/bin/pip" install --quiet -r "$NUTWATCH_DIR/requirements.txt"
+
+  # Install WOL dispatch helper (after venv so shebang is valid)
+  if [[ -f "$NUTWATCH_DIR/scripts/nutwatch-wol-dispatch" ]]; then
+    cp "$NUTWATCH_DIR/scripts/nutwatch-wol-dispatch" /usr/local/bin/nutwatch-wol-dispatch
+    chmod 755 /usr/local/bin/nutwatch-wol-dispatch
+  fi
 
   if [[ -n "${NUTWATCH_API_KEY:-}" ]]; then
     mkdir -p /etc/nutwatch

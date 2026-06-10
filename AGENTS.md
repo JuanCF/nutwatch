@@ -43,8 +43,8 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 ## NutWatch (src/backend/)
 
 - Modular Flask app: `app.py` (bootstrap), `auth.py` (Bearer auth), `config.py` (constants), `utils.py` (helpers), `parsers/` (config parsers), `services/` (business logic), `routes/` (API blueprints), `static/` (SPA frontend).
-- Web UI tabs: **UPS Devices** (with per-UPS hook editor), **Users**, **Notifications** (`upsmon.conf` editor), **Logs**, **Config Files**.
-- API endpoints: `/api/ups`, `/api/users`, `/api/upsmon/config`, `/api/hooks/<upsname>/<event>`, `/api/service/...`, `/api/logs/...`.
+- Web UI tabs: **UPS Devices** (with per-UPS hook editor), **Users**, **Notifications** (`upsmon.conf` editor), **Logs**, **Config Files**, **Wake on LAN**.
+- API endpoints: `/api/ups`, `/api/users`, `/api/upsmon/config`, `/api/hooks/<upsname>/<event>`, `/api/service/...`, `/api/logs/...`, `/api/wol/targets`, `/api/wol/mappings`.
 - Runs as `nutwatch.service` on port 8081 (configurable via `NUTWATCH_HOST`, `NUTWATCH_PORT` env vars).
 - Auth: Bearer token via `NUTWATCH_API_KEY` env var — if empty, auth is disabled.
 - Config writes use atomic `tempfile` + `os.replace`; input validated with `IDENTIFIER_REGEX`.
@@ -63,4 +63,8 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 - Hook ownership: per-UPS hook scripts must be `root:nut 750` so `upsmon` (running as the `nut` user) can execute them. `services/hooks.py::put_hook()` explicitly `chown`s to `root:nut` after writing.
 - `$UPSNAME` environment variable includes `@host:port` (e.g. `ups@localhost:3493`), but hook filenames use the bare UPS name. `notifycmd.sh` strips the suffix with `${UPSNAME%%@*}` before looking for the hook file.
 - UPS deletion cleans up orphaned hooks: `services/ups.py::delete_ups()` calls `delete_hook(name, event)` for every existing hook before returning.
+- UPS deletion also cleans up WOL mappings: `services/ups.py::delete_ups()` calls `services.wol.cleanup_for_ups(name)` to remove all WOL event mappings for the deleted UPS.
+- WOL is non-destructive to user hooks: `notifycmd.sh` runs WOL dispatch **after** the per-UPS per-event hook script, so user-written hooks are never touched.
+- WOL target deletion also cleans up orphaned target references in event mappings: `services/wol.py::delete_target()` removes the target name from all mapping target lists and drops any mappings with empty target lists.
 - `NOTIFYFLAG` must include `EXEC` for `upsmon` to actually invoke `NOTIFYCMD`. The VM template sets `SYSLOG+WALL+EXEC` for all 9 events by default.
+- WOL dispatch double-fires: both standalone install (`scripts/setup.sh`) and VM install (`vm/nut-vm.sh`) set up the same WOL dispatch call in `notifycmd.sh`, so the dispatch runs on both installation paths.
