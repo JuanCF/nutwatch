@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { API } from '../constants';
 import { formatRuntime } from '../utils/format';
+import { getBatteryChargeColor, getLoadColor } from '../utils/metrics';
 import Badge from './Badge';
 import Gauge from './Gauge';
 
@@ -179,7 +180,7 @@ export default function UpsDetail() {
               value={Math.min(charge, 100)}
               label="Battery"
               size={100}
-              color={charge <= 20 ? 'var(--red)' : charge <= 50 ? 'var(--orange)' : 'var(--green)'}
+              color={getBatteryChargeColor(charge)}
             />
           </div>
         )}
@@ -189,7 +190,7 @@ export default function UpsDetail() {
               value={Math.min(load, 100)}
               label="Load"
               size={100}
-              color={load >= 80 ? 'var(--red)' : load >= 60 ? 'var(--orange)' : 'var(--accent)'}
+              color={getLoadColor(load)}
             />
           </div>
         )}

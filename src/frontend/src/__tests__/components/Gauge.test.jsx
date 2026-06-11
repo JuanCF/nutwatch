@@ -35,6 +35,17 @@ describe('Gauge', () => {
     expect(screen.getByText('100%')).toBeInTheDocument();
   });
 
+  it('handles negative value', () => {
+    render(<Gauge value={-10} max={100} />);
+    expect(screen.getByText('0%')).toBeInTheDocument();
+  });
+
+  it('handles non-positive max', () => {
+    const { container } = render(<Gauge value={50} max={0} />);
+    expect(screen.getByText('0%')).toBeInTheDocument();
+    expect(container.querySelectorAll('svg path').length).toBe(1);
+  });
+
   it('handles 0 value', () => {
     render(<Gauge value={0} />);
     expect(screen.getByText('0%')).toBeInTheDocument();

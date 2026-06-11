@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import Badge from './Badge';
 import Gauge from './Gauge';
 import { formatRuntime } from '../utils/format';
+import { getBatteryChargeColor, getLoadColor } from '../utils/metrics';
 
 export default function UpsCard({ ups, detail, onEdit, onDriverAction, onDelete }) {
   const navigate = useNavigate();
@@ -14,8 +15,8 @@ export default function UpsCard({ ups, detail, onEdit, onDriverAction, onDelete 
   const outputVoltage = detail?.['output.voltage'];
   const voltage = outputVoltage || inputVoltage;
 
-  const chargeColor = charge <= 20 ? 'var(--red)' : charge <= 50 ? 'var(--orange)' : 'var(--green)';
-  const loadColor = load >= 80 ? 'var(--red)' : load >= 60 ? 'var(--orange)' : 'var(--accent)';
+  const chargeColor = getBatteryChargeColor(charge);
+  const loadColor = getLoadColor(load);
 
   return (
     <div className="card clickable" onClick={() => navigate('/ups/' + encodeURIComponent(ups.name))}>

@@ -5,7 +5,7 @@ const START_ANGLE = -Math.PI * 0.75;
 const SWEEP = Math.PI * 1.5;
 
 export default function Gauge({ value, max = 100, label, size = 80, color }) {
-  const pct = Math.min(value / max, 1);
+  const pct = max > 0 && isFinite(value) ? Math.min(Math.max(value / max, 0), 1) : 0;
   const sw = Math.max(4, size * 0.11);
   const r = (size - sw) / 2;
 
