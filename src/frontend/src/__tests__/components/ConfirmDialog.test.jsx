@@ -23,10 +23,10 @@ function ConfirmTester() {
 describe('ConfirmDialog', () => {
   it('throws when useConfirm is used outside provider', () => {
     function Bad() {
-      expect(() => useConfirm()).toThrow('useConfirm must be used within ConfirmProvider');
+      useConfirm();
       return null;
     }
-    render(<Bad />);
+    expect(() => render(<Bad />)).toThrow('useConfirm must be used within ConfirmProvider');
   });
 
   it('shows confirm dialog and resolves true on Confirm click', async () => {

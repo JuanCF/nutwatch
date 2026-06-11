@@ -16,10 +16,10 @@ function ModalOpener() {
 describe('Modal', () => {
   it('throws when useModal is used outside provider', () => {
     function Bad() {
-      expect(() => useModal()).toThrow('useModal must be used within ModalProvider');
+      useModal();
       return null;
     }
-    render(<Bad />);
+    expect(() => render(<Bad />)).toThrow('useModal must be used within ModalProvider');
   });
 
   it('opens and displays modal content', async () => {
