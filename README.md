@@ -54,10 +54,11 @@ This repository also includes `vm/nut-vm.sh`, a bash script to automatically cre
 
 ### CI/CD & Developer Tooling
 
-- **GitHub Actions** — Lint (shellcheck, shfmt), Python syntax check (py_compile), pytest, and automated release workflow on tag push
+- **GitHub Actions** — Lint (shellcheck, shfmt), Python syntax check (py_compile), pytest, frontend tests (Vitest), and automated release workflow on tag push
 - **Makefile** — `check`, `lint`, `fmt`, `fmt-fix`, `lint-python`, `test-python`, `build-frontend`, `build-tarball`, `install-tools`
 - **`build-tarball`** — Creates `nutwatch.tar.gz` for release distribution (git-ignored)
-- **Unit Tests** — Pytest suite covering parser roundtrips (ups.conf, upsd.users, upsmon.conf, nut-scanner), monitor line manipulation, and edge cases
+- **Backend Tests** — Pytest suite covering parsers, service layer (UPS, users, upsmon, hooks, WOL, system), auth, route handlers, and utility functions
+- **Frontend Tests** — Vitest suite covering components (Badge, Modal, ConfirmDialog, ErrorBoundary, theme) and utilities (API, format, logs, directives, service)
 
 ---
 
@@ -125,7 +126,16 @@ src/backend/
 │   └── wol.py           # WOL target and event-mapping CRUD endpoints
 ├── static/              # Built React SPA (index.html + assets/)
 ├── tests/
-│   └── test_parsers.py  # 25+ parser roundtrip tests
+│   ├── test_parsers.py           # Parser roundtrip tests
+│   ├── test_auth.py              # Bearer auth tests
+│   ├── test_routes.py            # API endpoint integration tests
+│   ├── test_services_hooks.py    # Hook file CRUD tests
+│   ├── test_services_system.py   # Service/driver/config tests
+│   ├── test_services_ups.py      # UPS CRUD tests
+│   ├── test_services_upsmon.py   # Upsmon config tests
+│   ├── test_services_users.py    # User CRUD tests
+│   ├── test_services_wol.py      # WOL target/mapping tests
+│   └── test_utils.py             # Utility function tests
 ├── scripts/
 │   ├── notifycmd.sh          # UPS event notify dispatcher (hooks + WOL)
 │   └── nutwatch-wol-dispatch # WOL auto-dispatch called by notifycmd.sh
@@ -424,12 +434,13 @@ NUTWATCH_URL_PREFIX="http://<your-ip>:8080" bash vm/nut-vm.sh
 ## Developer Commands
 
 ```bash
-make check          # Full CI suite: lint + format check + Python lint + pytest
+make check          # Full CI suite: lint + format check + Python lint + pytest + frontend tests
 make lint           # shellcheck only
 make fmt            # shfmt -d -i 2 (check only)
 make fmt-fix        # shfmt -w -i 2 (auto-fix)
 make lint-python    # py_compile check on all Python files
 make test-python    # pytest on src/backend/tests/
+make test-frontend  # Vitest on src/frontend/src/__tests__/
 make build-frontend # npm ci + npm run build
 make build-tarball  # Create nutwatch.tar.gz for distribution
 make install-tools  # Install dev dependencies

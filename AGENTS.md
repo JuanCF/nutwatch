@@ -19,6 +19,9 @@ make fmt-fix        # shfmt -w -i 2 (auto-fix)
 make lint-python    # py_compile check on app.py
 make test-python    # pytest on src/backend/tests/
 make install-tools  # apt-get shellcheck shfmt python3-pytest
+
+# Python tests require a venv — do not install deps directly on the host:
+#   python3 -m venv .venv && source .venv/bin/activate && pip install -r src/backend/requirements.txt
 ```
 
 CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see `.github/workflows/lint.yml`). `make check` reproduces the full local suite.
@@ -49,7 +52,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 - Auth: Bearer token via `NUTWATCH_API_KEY` env var — if empty, auth is disabled.
 - Config writes use atomic `tempfile` + `os.replace`; input validated with `IDENTIFIER_REGEX`.
 - `scripts/setup.sh --install-only` downloads a pre-built tarball from GitHub Releases (pinned by `NUTWATCH_REF` tag). To test a local build, run `make build-tarball`, serve the tarball, and set `NUTWATCH_URL_PREFIX`.
-- Unit tests in `tests/test_parsers.py` cover parser roundtrips. Import from `parsers` or `utils` (not from app.py) — tests run from `src/backend/`.
+- Tests live in `tests/` (10 files): parser roundtrips, service-layer CRUD, auth, routes, and utilities. Import from `parsers`, `utils`, `services`, `auth`, or `routes` (not from `app.py`) — tests run from `src/backend/`.
 
 ## Edge Cases
 
