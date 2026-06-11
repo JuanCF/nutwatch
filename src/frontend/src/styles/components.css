@@ -333,7 +333,7 @@
   gap: 0.5rem;
 }
 
-.dash-ups-item, .dash-svc-item {
+.dash-svc-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -344,8 +344,41 @@
   transition: background var(--transition);
 }
 
-.dash-ups-item:hover, .dash-svc-item:hover {
+.dash-svc-item:hover {
   background: var(--surface-hover);
+}
+
+.dash-ups-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-ups-tr {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 0.8fr 0.8fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dash-ups-tr:last-child {
+  border-bottom: none;
+}
+
+.dash-ups-th {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding-top: 0;
+}
+
+.dash-ups-th span:nth-child(2),
+.dash-ups-th span:nth-child(3),
+.dash-ups-th span:nth-child(4) {
+  text-align: center;
 }
 
 .dash-ups-name {
@@ -353,6 +386,21 @@
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-ups-gauge-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dash-ups-status-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dash-svc-state {
@@ -386,13 +434,61 @@
   font-family: var(--mono);
 }
 
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+.detail-metrics {
+  display: flex;
   gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.detail-metric-card {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.detail-metric-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+.detail-metric-texts {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.detail-metric-text {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.detail-grid {
+  columns: 2 340px;
+  column-gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .detail-grid {
+    columns: 1;
+  }
 }
 
 .detail-section {
+  break-inside: avoid;
+  margin-bottom: 1rem;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -713,6 +809,49 @@ button.danger:hover {
   font-size: 0.7rem;
   color: var(--text-muted);
   font-family: var(--mono);
+}
+
+/* ─── Gauges ─── */
+
+.gauge-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.gauge-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.gauge-value {
+  position: absolute;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.gauge-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.card-metrics-row-gauges {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
 }
 
 /* ─── Badges ─── */
@@ -1191,10 +1330,6 @@ textarea#config-editor {
   }
 
   .card-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .detail-grid {
     grid-template-columns: 1fr;
   }
 
