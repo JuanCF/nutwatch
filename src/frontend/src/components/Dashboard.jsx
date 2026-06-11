@@ -3,6 +3,7 @@ import { api } from '../api';
 import { API } from '../constants';
 import { statusToBadgeClass } from '../utils/service';
 import Badge from './Badge';
+import Gauge from './Gauge';
 
 function SkeletonDashboard() {
   return (
@@ -34,6 +35,7 @@ function SkeletonDashboard() {
 
 export default function Dashboard() {
   const [upsList, setUpsList] = useState([]);
+  const [details, setDetails] = useState({});
   const [userCount, setUserCount] = useState(null);
   const [services, setServices] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,6 +55,22 @@ export default function Dashboard() {
     });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (upsList.length === 0) {
+      setDetails({});
+      return;
+    }
+    let cancelled = false;
+    const names = upsList.map(u => u.name);
+    Promise.all(names.map(n => api(API.upsDetail(n)).catch(() => null))).then(results => {
+      if (cancelled) return;
+      const m = {};
+      names.forEach((n, i) => { if (results[i]) m[n] = results[i]; });
+      setDetails(m);
+    });
+    return () => { cancelled = true; };
+  }, [upsList]);
 
   if (loading) return <SkeletonDashboard />;
 
@@ -110,14 +128,35 @@ export default function Dashboard() {
       <div className="dashboard-row">
         <div className="dashboard-card">
           <h3>UPS Overview</h3>
-          <div className="dash-list">
-            {upsList.length === 0 ? <div className="empty">No UPS devices configured.</div> : upsList.map(u => (
-              <div key={u.name} className="dash-ups-item">
-                <span className="dash-ups-name">{u.name}</span>
-                <Badge status={u.status} />
+          {upsList.length === 0 ? <div className="empty">No UPS devices configured.</div> : (
+            <div className="dash-ups-table">
+              <div className="dash-ups-tr dash-ups-th">
+                <span>UPS</span>
+                <span>Battery</span>
+                <span>Load</span>
+                <span>Status</span>
               </div>
-            ))}
-          </div>
+              {upsList.map(u => {
+                const d = details[u.name];
+                const charge = d?.['battery.charge'];
+                const load = d?.['ups.load'];
+                const chargeColor = charge <= 20 ? 'var(--red)' : charge <= 50 ? 'var(--orange)' : 'var(--green)';
+                const loadColor = load >= 80 ? 'var(--red)' : load >= 60 ? 'var(--orange)' : 'var(--accent)';
+                return (
+                  <div key={u.name} className="dash-ups-tr">
+                    <span className="dash-ups-name">{u.name}</span>
+                    <span className="dash-ups-gauge-cell">
+                      {charge != null && <Gauge value={charge} size={44} color={chargeColor} />}
+                    </span>
+                    <span className="dash-ups-gauge-cell">
+                      {load != null && <Gauge value={load} size={44} color={loadColor} />}
+                    </span>
+                    <span className="dash-ups-status-cell"><Badge status={u.status} /></span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="dashboard-card">
           <h3>Services</h3>

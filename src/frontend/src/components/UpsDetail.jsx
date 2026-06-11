@@ -4,6 +4,7 @@ import { api } from '../api';
 import { API } from '../constants';
 import { formatRuntime } from '../utils/format';
 import Badge from './Badge';
+import Gauge from './Gauge';
 
 function niceLabel(key) {
   const name = key.includes('.') ? key.split('.').slice(1).join(' - ') : key;
@@ -147,6 +148,13 @@ export default function UpsDetail() {
     grouped[prefix].push([key, val]);
   }
 
+  const charge = detail['battery.charge'];
+  const load = detail['ups.load'];
+  const runtime = detail['battery.runtime'];
+  const inputV = detail['input.voltage'];
+  const outputV = detail['output.voltage'];
+  const voltage = outputV || inputV;
+
   return (
     <>
       <div className="detail-header">
@@ -164,51 +172,47 @@ export default function UpsDetail() {
         <button className="secondary" onClick={() => navigate('/ups')}>Back to UPS Devices</button>
       </div>
 
+      <div className="detail-metrics">
+        {charge != null && (
+          <div className="detail-metric-card">
+            <Gauge
+              value={Math.min(charge, 100)}
+              label="Battery"
+              size={100}
+              color={charge <= 20 ? 'var(--red)' : charge <= 50 ? 'var(--orange)' : 'var(--green)'}
+            />
+          </div>
+        )}
+        {load != null && (
+          <div className="detail-metric-card">
+            <Gauge
+              value={Math.min(load, 100)}
+              label="Load"
+              size={100}
+              color={load >= 80 ? 'var(--red)' : load >= 60 ? 'var(--orange)' : 'var(--accent)'}
+            />
+          </div>
+        )}
+        <div className="detail-metric-card detail-metric-texts">
+          {runtime != null && <span className="detail-metric-text">Runtime {formatRuntime(runtime)}</span>}
+          {voltage != null && <span className="detail-metric-text">{voltage} V</span>}
+        </div>
+      </div>
+
       <div className="detail-grid">
         {GROUPS.filter(g => grouped[g.prefix]).map(group => (
           <div key={group.prefix} className="detail-section">
             <h3 className="detail-section-title">{group.label}</h3>
             <div className="detail-items">
               {grouped[group.prefix]
+                .filter(([key]) => key !== 'battery.charge' && key !== 'ups.load')
                 .sort(([a], [b]) => a.localeCompare(b))
-                .map(([key, val]) => {
-                  if (key === 'battery.charge') {
-                    const pct = Math.min(val, 100);
-                    const color = pct <= 20 ? 'var(--red)' : pct <= 50 ? 'var(--orange)' : 'var(--green)';
-                    return (
-                      <div key={key} className="detail-item detail-item-bar">
-                        <span className="detail-item-label">Charge</span>
-                        <div className="detail-bar-wrap">
-                          <div className="detail-bar">
-                            <div className="detail-bar-fill" style={{ width: pct + '%', background: color }} />
-                          </div>
-                          <span className="detail-bar-text">{pct}%</span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (key === 'ups.load') {
-                    const pct = Math.min(val, 100);
-                    const color = pct >= 80 ? 'var(--red)' : pct >= 60 ? 'var(--orange)' : 'var(--accent)';
-                    return (
-                      <div key={key} className="detail-item detail-item-bar">
-                        <span className="detail-item-label">Load</span>
-                        <div className="detail-bar-wrap">
-                          <div className="detail-bar">
-                            <div className="detail-bar-fill" style={{ width: pct + '%', background: color }} />
-                          </div>
-                          <span className="detail-bar-text">{pct}%</span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return (
+                .map(([key, val]) => (
                     <div key={key} className="detail-item">
                       <span className="detail-item-label">{niceLabel(key)}</span>
                       <span className="detail-item-value">{fmtVal(key, val)}</span>
                     </div>
-                  );
-                })}
+                ))}
             </div>
           </div>
         ))}
