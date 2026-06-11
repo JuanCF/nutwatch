@@ -1,0 +1,584 @@
+import pytest
+from flask import Flask
+
+import routes.hooks
+import routes.logs
+import routes.system
+import routes.ups
+import routes.upsmon
+import routes.users
+import routes.wol
+
+
+def _make_app():
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    return app
+
+
+def _register_all(app):
+    app.register_blueprint(routes.hooks.hooks_bp)
+    app.register_blueprint(routes.logs.logs_bp)
+    app.register_blueprint(routes.system.system_bp)
+    app.register_blueprint(routes.ups.ups_bp)
+    app.register_blueprint(routes.upsmon.upsmon_bp)
+    app.register_blueprint(routes.users.users_bp)
+    app.register_blueprint(routes.wol.wol_bp)
+    return app
+
+
+@pytest.fixture(autouse=True)
+def no_auth(monkeypatch):
+    monkeypatch.setattr("auth.NUTWATCH_API_KEY", "")
+
+
+# ── Hooks routes ──────────────────────────────────────────────────────
+
+def test_list_hooks_route(monkeypatch):
+    monkeypatch.setattr("routes.hooks.list_hooks", lambda n: ["ONLINE"])
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/hooks/myups")
+        assert resp.status_code == 200
+        assert resp.get_json()["hooks"] == ["ONLINE"]
+
+
+def test_list_hooks_route_invalid_name():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/hooks/")
+        assert resp.status_code == 404
+
+
+def test_get_hook_route(monkeypatch):
+    monkeypatch.setattr("routes.hooks.get_hook", lambda n, e: "echo hi")
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/hooks/myups/ONLINE")
+        assert resp.status_code == 200
+        assert resp.get_json()["content"] == "echo hi"
+
+
+def test_get_hook_route_not_found(monkeypatch):
+    monkeypatch.setattr("routes.hooks.get_hook", lambda n, e: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/hooks/myups/ONLINE")
+        assert resp.status_code == 404
+
+
+def test_put_hook_route(monkeypatch):
+    monkeypatch.setattr("routes.hooks.put_hook", lambda n, e, c: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/hooks/myups/ONLINE", json={"content": "echo hi"})
+        assert resp.status_code == 200
+
+
+def test_put_hook_route_validation_error(monkeypatch):
+    monkeypatch.setattr("routes.hooks.put_hook", lambda n, e, c: (_ for _ in ()).throw(ValueError("bad")))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/hooks/myups/ONLINE", json={"content": ""})
+        assert resp.status_code == 400
+
+
+def test_delete_hook_route(monkeypatch):
+    monkeypatch.setattr("routes.hooks.delete_hook", lambda n, e: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.delete("/api/hooks/myups/ONLINE")
+        assert resp.status_code == 200
+
+
+# ── Logs routes ───────────────────────────────────────────────────────
+
+def test_recent_logs(monkeypatch):
+    monkeypatch.setattr("routes.logs.run_cmd", lambda cmd, **kw: (0, "log line 1\nlog line 2\n", ""))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/logs/recent")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["returncode"] == 0
+
+
+# ── System routes ─────────────────────────────────────────────────────
+
+def test_get_config_route(monkeypatch):
+    monkeypatch.setattr("routes.system.get_config", lambda f: "content")
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/config/ups.conf")
+        assert resp.status_code == 200
+        assert resp.data.decode() == "content"
+
+
+def test_get_config_route_not_allowed():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/config/../../etc/passwd")
+        assert resp.status_code == 404
+
+
+def test_get_config_route_not_found(monkeypatch):
+    monkeypatch.setattr("routes.system.get_config", lambda f: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/config/ups.conf")
+        assert resp.status_code == 404
+
+
+def test_put_config_route(monkeypatch):
+    monkeypatch.setattr("routes.system.put_config", lambda f, c: True)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/config/upsmon.conf", data="content")
+        assert resp.status_code == 200
+
+
+def test_put_config_route_not_allowed():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/config/evil.conf", data="x")
+        assert resp.status_code == 403
+
+
+def test_put_config_route_upsd_users_forbidden(monkeypatch):
+    monkeypatch.setattr("routes.system.put_config", lambda f, c: True)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/config/upsd.users", data="x")
+        assert resp.status_code == 403
+
+
+def test_put_config_route_fail(monkeypatch):
+    monkeypatch.setattr("routes.system.put_config", lambda f, c: False)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/config/upsmon.conf", data="x")
+        assert resp.status_code == 500
+
+
+def test_service_action_restart_server(monkeypatch):
+    monkeypatch.setattr("routes.system.restart_server", lambda: (0, "ok", ""))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/service/restart-server")
+        assert resp.status_code == 200
+
+
+def test_service_action_unknown():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/service/unknown")
+        assert resp.status_code == 400
+
+
+def test_service_status_detailed(monkeypatch):
+    monkeypatch.setattr("routes.system.detailed_service_status", lambda: {"nut-server": {"active": True, "state": "active"}})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/service/status-detailed")
+        assert resp.status_code == 200
+
+
+def test_driver_action_route(monkeypatch):
+    monkeypatch.setattr("routes.system.driver_action", lambda n, a: (0, "", ""))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/driver/myups/start")
+        assert resp.status_code == 200
+
+
+def test_driver_action_invalid_name():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/driver//start")
+        assert resp.status_code == 404
+
+
+def test_driver_action_unknown_action():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/driver/myups/unknown")
+        assert resp.status_code == 400
+
+
+# ── UPS routes ────────────────────────────────────────────────────────
+
+def test_list_ups_route(monkeypatch):
+    monkeypatch.setattr("routes.ups.list_ups", lambda: [{"name": "myups", "status": "online"}])
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/ups")
+        assert resp.status_code == 200
+        assert len(resp.get_json()) == 1
+
+
+def test_add_ups_route(monkeypatch):
+    monkeypatch.setattr("routes.ups.add_ups", lambda d: ({"name": "newups"}, None))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/ups", json={"name": "newups", "driver": "usbhid-ups"})
+        assert resp.status_code == 201
+
+
+def test_add_ups_route_no_name():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/ups", json={})
+        assert resp.status_code == 400
+
+
+def test_add_ups_route_conflict(monkeypatch):
+    monkeypatch.setattr("routes.ups.add_ups", lambda d: (None, "UPS already exists"))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/ups", json={"name": "dup"})
+        assert resp.status_code == 409
+
+
+def test_add_ups_route_invalid_directives():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/ups", json={"name": "u", "directives": "not-a-dict"})
+        assert resp.status_code == 400
+
+
+def test_get_ups_route(monkeypatch):
+    monkeypatch.setattr("routes.ups.get_ups", lambda n: {"name": "myups", "status": "online"})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/ups/myups")
+        assert resp.status_code == 200
+
+
+def test_get_ups_route_not_found(monkeypatch):
+    monkeypatch.setattr("routes.ups.get_ups", lambda n: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/ups/myups")
+        assert resp.status_code == 404
+
+
+def test_get_ups_detail_route(monkeypatch):
+    monkeypatch.setattr("routes.ups.get_ups_detail", lambda n: {"battery.charge": 100})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/ups/myups/detail")
+        assert resp.status_code == 200
+
+
+def test_get_ups_detail_route_fail(monkeypatch):
+    monkeypatch.setattr("routes.ups.get_ups_detail", lambda n: (_ for _ in ()).throw(RuntimeError("driver not running")))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/ups/myups/detail")
+        assert resp.status_code == 500
+
+
+def test_edit_ups_route(monkeypatch):
+    monkeypatch.setattr("routes.ups.edit_ups", lambda n, d: {"name": "myups", "desc": "Updated"})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/ups/myups", json={"desc": "Updated"})
+        assert resp.status_code == 200
+
+
+def test_edit_ups_route_not_found(monkeypatch):
+    monkeypatch.setattr("routes.ups.edit_ups", lambda n, d: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/ups/myups", json={"desc": "X"})
+        assert resp.status_code == 404
+
+
+def test_edit_ups_route_invalid_directives():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/ups/myups", json={"directives": "not-a-dict"})
+        assert resp.status_code == 400
+
+
+def test_delete_ups_route(monkeypatch):
+    monkeypatch.setattr("routes.ups.delete_ups", lambda n: True)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.delete("/api/ups/myups")
+        assert resp.status_code == 200
+
+
+def test_delete_ups_route_not_found(monkeypatch):
+    monkeypatch.setattr("routes.ups.delete_ups", lambda n: False)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.delete("/api/ups/myups")
+        assert resp.status_code == 404
+
+
+def test_scan_ups_route(monkeypatch):
+    monkeypatch.setattr("routes.ups.scan_ups", lambda: {"returncode": 0, "devices": []})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/ups/scan")
+        assert resp.status_code == 200
+
+
+# ── Upsmon routes ─────────────────────────────────────────────────────
+
+def test_get_upsmon_config_route(monkeypatch):
+    monkeypatch.setattr("routes.upsmon.get_upsmon_config", lambda: {"monitors": [], "minsupplies": 0})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/upsmon/config")
+        assert resp.status_code == 200
+
+
+def test_put_upsmon_config_route(monkeypatch):
+    monkeypatch.setattr("routes.upsmon.put_upsmon_config", lambda d: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/upsmon/config", json={"monitors": [], "minsupplies": 0})
+        assert resp.status_code == 200
+
+
+def test_put_upsmon_config_route_validation_error(monkeypatch):
+    monkeypatch.setattr("routes.upsmon.put_upsmon_config", lambda d: (_ for _ in ()).throw(ValueError("bad")))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/upsmon/config", json={"monitors": []})
+        assert resp.status_code == 400
+
+
+# ── Users routes ──────────────────────────────────────────────────────
+
+def test_list_users_route(monkeypatch):
+    monkeypatch.setattr("routes.users.list_users", lambda: [{"name": "monuser"}])
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/users")
+        assert resp.status_code == 200
+
+
+def test_add_user_route(monkeypatch):
+    monkeypatch.setattr("routes.users.add_user", lambda d: ({"name": "newuser"}, None))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/users", json={"name": "newuser", "password": "secret"})
+        assert resp.status_code == 201
+
+
+def test_add_user_route_no_name():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/users", json={})
+        assert resp.status_code == 400
+
+
+def test_add_user_route_conflict(monkeypatch):
+    monkeypatch.setattr("routes.users.add_user", lambda d: (None, "user already exists"))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/users", json={"name": "dup"})
+        assert resp.status_code == 409
+
+
+def test_edit_user_route(monkeypatch):
+    monkeypatch.setattr("routes.users.edit_user", lambda n, d: {"name": "monuser", "upsmon": "slave"})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/users/monuser", json={"upsmon": "slave"})
+        assert resp.status_code == 200
+
+
+def test_edit_user_route_not_found(monkeypatch):
+    monkeypatch.setattr("routes.users.edit_user", lambda n, d: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/users/monuser", json={"upsmon": "slave"})
+        assert resp.status_code == 404
+
+
+def test_delete_user_route(monkeypatch):
+    monkeypatch.setattr("routes.users.delete_user", lambda n: True)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.delete("/api/users/monuser")
+        assert resp.status_code == 200
+
+
+def test_delete_user_route_not_found(monkeypatch):
+    monkeypatch.setattr("routes.users.delete_user", lambda n: False)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.delete("/api/users/monuser")
+        assert resp.status_code == 404
+
+
+# ── WOL routes ────────────────────────────────────────────────────────
+
+def test_wol_list_targets(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.list_targets", lambda: {"box": {"mac": "aa:bb:cc:dd:ee:ff"}})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/wol/targets")
+        assert resp.status_code == 200
+        assert "box" in resp.get_json()["targets"]
+
+
+def test_wol_create_target(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.add_target", lambda **kw: {"mac": "aa:bb:cc:dd:ee:ff"})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/targets", json={"name": "box", "mac": "aa:bb:cc:dd:ee:ff"})
+        assert resp.status_code == 201
+
+
+def test_wol_create_target_no_name():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/targets", json={"mac": "aa:bb:cc:dd:ee:ff"})
+        assert resp.status_code == 400
+
+
+def test_wol_create_target_invalid_mac(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.add_target", lambda **kw: (_ for _ in ()).throw(ValueError("Invalid MAC")))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/targets", json={"name": "box", "mac": "bad"})
+        assert resp.status_code == 400
+
+
+def test_wol_create_target_conflict(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.add_target", lambda **kw: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/targets", json={"name": "dup", "mac": "aa:bb:cc:dd:ee:ff"})
+        assert resp.status_code == 409
+
+
+def test_wol_update_target(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.update_target", lambda **kw: {"mac": "aa:bb:cc:dd:ee:ff"})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/wol/targets/box", json={"description": "Updated"})
+        assert resp.status_code == 200
+
+
+def test_wol_update_target_not_found(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.update_target", lambda **kw: None)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/wol/targets/box", json={})
+        assert resp.status_code == 404
+
+
+def test_wol_update_target_invalid_mac(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.update_target", lambda **kw: (_ for _ in ()).throw(ValueError("Invalid MAC")))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.put("/api/wol/targets/box", json={"mac": "bad"})
+        assert resp.status_code == 400
+
+
+def test_wol_delete_target(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.delete_target", lambda n: True)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.delete("/api/wol/targets/box")
+        assert resp.status_code == 200
+
+
+def test_wol_delete_target_not_found(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.delete_target", lambda n: False)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.delete("/api/wol/targets/box")
+        assert resp.status_code == 404
+
+
+def test_wol_wake_target(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.send_wol", lambda n: True)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/targets/box/wake")
+        assert resp.status_code == 200
+
+
+def test_wol_wake_target_not_found(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.send_wol", lambda n: (_ for _ in ()).throw(ValueError("not found")))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/targets/box/wake")
+        assert resp.status_code == 404
+
+
+def test_wol_wake_target_no_package(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.send_wol", lambda n: (_ for _ in ()).throw(RuntimeError("not installed")))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/targets/box/wake")
+        assert resp.status_code == 500
+
+
+def test_wol_wake_all(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.wake_all", lambda: {"box": "ok"})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/wake-all")
+        assert resp.status_code == 200
+
+
+def test_wol_list_mappings(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.list_mappings", lambda: [])
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/wol/mappings")
+        assert resp.status_code == 200
+
+
+def test_wol_create_mapping(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.add_mapping", lambda u, e, t: {"ups": "u", "event": "ONLINE", "targets": ["box"]})
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/mappings", json={"ups": "u", "event": "ONLINE", "targets": ["box"]})
+        assert resp.status_code == 201
+
+
+def test_wol_create_mapping_missing_ups():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/mappings", json={"event": "ONLINE", "targets": ["box"]})
+        assert resp.status_code == 400
+
+
+def test_wol_create_mapping_no_targets():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/mappings", json={"ups": "u", "event": "ONLINE", "targets": []})
+        assert resp.status_code == 400
+
+
+def test_wol_create_mapping_validation_error(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.add_mapping", lambda u, e, t: (_ for _ in ()).throw(ValueError("bad")))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/wol/mappings", json={"ups": "u", "event": "ONLINE", "targets": ["box"]})
+        assert resp.status_code == 400
+
+
+def test_wol_delete_mapping(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.delete_mapping", lambda i: True)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.delete("/api/wol/mappings/0")
+        assert resp.status_code == 200
+
+
+def test_wol_delete_mapping_not_found(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.delete_mapping", lambda i: False)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.delete("/api/wol/mappings/0")
+        assert resp.status_code == 404
