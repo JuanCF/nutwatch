@@ -27,8 +27,11 @@ describe('ConfirmDialog', () => {
       useConfirm();
       return null;
     }
-    expect(() => render(<Bad />)).toThrow('useConfirm must be used within ConfirmProvider');
-    err.mockRestore();
+    try {
+      expect(() => render(<Bad />)).toThrow('useConfirm must be used within ConfirmProvider');
+    } finally {
+      err.mockRestore();
+    }
   });
 
   it('shows confirm dialog and resolves true on Confirm click', async () => {

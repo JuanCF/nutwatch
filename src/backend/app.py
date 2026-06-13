@@ -40,6 +40,8 @@ def create_app():
 
     try:
         interval = int(os.environ.get("NUTWATCH_HISTORY_INTERVAL", "60"))
+        if interval <= 0:
+            raise ValueError
     except ValueError:
         logger.warning("Invalid NUTWATCH_HISTORY_INTERVAL; falling back to 60s")
         interval = 60

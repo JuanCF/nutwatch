@@ -249,8 +249,25 @@ function drawChart(svgEl, data, selectedVars, range) {
     });
 
     const timeStr = formatTooltipTime(closestT);
-    tooltip.innerHTML = `<div class="chart-tooltip-time">${timeStr}</div>` +
-      lines.map(l => `<div class="chart-tooltip-row"><span class="chart-tooltip-dot" style="background:${l.color}"></span>${l.name}: <strong>${l.val != null ? (typeof l.val === 'number' ? l.val.toFixed(1) : l.val) : '—'}</strong></div>`).join('');
+    tooltip.textContent = '';
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'chart-tooltip-time';
+    timeDiv.textContent = timeStr;
+    tooltip.appendChild(timeDiv);
+    for (const l of lines) {
+      const row = document.createElement('div');
+      row.className = 'chart-tooltip-row';
+      const dot = document.createElement('span');
+      dot.className = 'chart-tooltip-dot';
+      dot.style.background = l.color;
+      row.appendChild(dot);
+      const valStr = l.val != null ? (typeof l.val === 'number' ? l.val.toFixed(1) : String(l.val)) : '—';
+      const strong = document.createElement('strong');
+      strong.textContent = valStr;
+      row.appendChild(document.createTextNode(`${l.name}: `));
+      row.appendChild(strong);
+      tooltip.appendChild(row);
+    }
     tooltip.style.display = 'block';
     const ttRect = tooltip.getBoundingClientRect();
     let tx = e.clientX - rect.left + 12;
@@ -289,9 +306,11 @@ export default function HistoryChart({ upsName }) {
   const dataRef = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     api(API.historyVariables(upsName))
       .then(res => {
+        if (cancelled) return;
         const vars = (res.variables || []).filter(isDynamicVar);
         setAvailableVars(vars);
         const initSel = {};
@@ -306,7 +325,8 @@ export default function HistoryChart({ upsName }) {
         setSelectedVars(initSel);
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [upsName]);
 
   // Fetch every available variable's series once per range/UPS. Toggling a
@@ -316,13 +336,16 @@ export default function HistoryChart({ upsName }) {
       setData(null);
       return;
     }
+    let cancelled = false;
     setLoading(true);
     api(API.history(upsName, range, availableVars))
       .then(res => {
+        if (cancelled) return;
         setData(res.variables || {});
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [range, upsName, availableVars]);
 
   useEffect(() => {

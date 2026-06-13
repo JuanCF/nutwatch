@@ -107,12 +107,14 @@ Functions to implement:
    - `since` is a Unix timestamp (computed from the requested range).
    - If `variables` is None, return all variables.
    - Return format:
+
      ```python
      {
          "ups": "myups",
          "variables": {"battery.charge": [[t1, v1], [t2, v2], ...], ...}
      }
      ```
+
    - Each series is a list of `[timestamp, value]` pairs sorted by time.
 
 3. **`get_available_variables(ups_name: str) -> list[str]`**
@@ -225,7 +227,7 @@ function HistoryChart({ upsName }) {
 
 Replace the single-page layout with two tabs at the top of the content area:
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │  [UPS name]  [Badge]  [Live/Paused]  [Back] │
 ├─────────────────────────────────────────────┤
@@ -242,11 +244,13 @@ Replace the single-page layout with two tabs at the top of the content area:
 **Tab 2: "Charts"** — The `<HistoryChart>` component. No gauges, no variable grid, no raw toggle — just the chart area with its time-range selector and variable checkboxes.
 
 **State management in UpsDetail:**
+
 ```jsx
 const [activeTab, setActiveTab] = useState('info');  // 'info' | 'charts'
 ```
 
 **Tab bar implementation:**
+
 ```jsx
 <div className="tab-bar">
   <button className={`tab ${activeTab === 'info' ? 'active' : ''}`}
@@ -264,6 +268,7 @@ const [activeTab, setActiveTab] = useState('info');  // 'info' | 'charts'
 ```
 
 **CSS for tabs (add to `src/frontend/src/styles/components.css`):**
+
 ```css
 .tab-bar {
   display: flex;
@@ -299,6 +304,7 @@ UpsDetail's existing live-polling interval runs regardless of which tab is activ
 ### `GET /api/history/myups?range=24h`
 
 Response:
+
 ```json
 {
   "ups": "myups",
@@ -315,6 +321,7 @@ Response:
 ### `GET /api/history/myups/variables`
 
 Response:
+
 ```json
 {
   "variables": ["battery.charge", "battery.runtime", "input.voltage", "ups.load"]

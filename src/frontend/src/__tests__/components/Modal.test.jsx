@@ -20,8 +20,11 @@ describe('Modal', () => {
       useModal();
       return null;
     }
-    expect(() => render(<Bad />)).toThrow('useModal must be used within ModalProvider');
-    err.mockRestore();
+    try {
+      expect(() => render(<Bad />)).toThrow('useModal must be used within ModalProvider');
+    } finally {
+      err.mockRestore();
+    }
   });
 
   it('opens and displays modal content', async () => {

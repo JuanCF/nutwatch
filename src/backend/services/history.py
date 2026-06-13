@@ -8,7 +8,11 @@ logger = logging.getLogger(__name__)
 
 HISTORY_DB = os.environ.get("NUTWATCH_HISTORY_DB", "/var/lib/nutwatch/history.db")
 DEFAULT_INTERVAL = 60
-DEFAULT_RETENTION_DAYS = int(os.environ.get("NUTWATCH_HISTORY_RETENTION_DAYS", "90"))
+try:
+    DEFAULT_RETENTION_DAYS = int(os.environ.get("NUTWATCH_HISTORY_RETENTION_DAYS", "90"))
+except ValueError:
+    logger.warning("Invalid NUTWATCH_HISTORY_RETENTION_DAYS; falling back to 90 days")
+    DEFAULT_RETENTION_DAYS = 90
 
 _cycle_count = 0
 
@@ -40,7 +44,9 @@ def _ensure_schema(conn):
 
 
 def get_db():
-    os.makedirs(os.path.dirname(HISTORY_DB), exist_ok=True)
+    db_dir = os.path.dirname(HISTORY_DB)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = sqlite3.connect(HISTORY_DB)
     conn.row_factory = sqlite3.Row
     # Per-connection: wait up to 5s for a competing writer instead of failing
