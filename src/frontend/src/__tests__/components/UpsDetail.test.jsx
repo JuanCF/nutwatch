@@ -106,4 +106,41 @@ describe('UpsDetail', () => {
     renderDetail();
     await waitFor(() => expect(screen.getByText('Show all variables (raw)')).toBeInTheDocument());
   });
+
+  it('renders tab bar with Info and Charts buttons', async () => {
+    api
+      .mockResolvedValueOnce({ name: 'testups', status: 'online' })
+      .mockResolvedValueOnce(MOCK_DETAIL);
+
+    renderDetail();
+    await waitFor(() => {
+      expect(screen.getByText('Info')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Charts')).toBeInTheDocument();
+  });
+
+  it('shows Info tab active by default', async () => {
+    api
+      .mockResolvedValueOnce({ name: 'testups', status: 'online' })
+      .mockResolvedValueOnce(MOCK_DETAIL);
+
+    renderDetail();
+    await waitFor(() => {
+      const infoTab = screen.getByText('Info');
+      expect(infoTab.className).toContain('active');
+    });
+    const chartsTab = screen.getByText('Charts');
+    expect(chartsTab.className).not.toContain('active');
+  });
+
+  it('shows info content by default (gauges visible)', async () => {
+    api
+      .mockResolvedValueOnce({ name: 'testups', status: 'online' })
+      .mockResolvedValueOnce(MOCK_DETAIL);
+
+    renderDetail();
+    await waitFor(() => {
+      expect(screen.getByText('85%')).toBeInTheDocument();
+    });
+  });
 });

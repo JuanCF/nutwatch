@@ -6,6 +6,7 @@ import { formatRuntime } from '../utils/format';
 import { getBatteryChargeColor, getLoadColor } from '../utils/metrics';
 import Badge from './Badge';
 import Gauge from './Gauge';
+import HistoryChart from './HistoryChart';
 
 function niceLabel(key) {
   const name = key.includes('.') ? key.split('.').slice(1).join(' - ') : key;
@@ -75,6 +76,7 @@ export default function UpsDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [live, setLive] = useState(true);
+  const [activeTab, setActiveTab] = useState('info');
   const intervalRef = useRef(null);
 
   useEffect(() => {
@@ -173,58 +175,80 @@ export default function UpsDetail() {
         <button className="secondary" onClick={() => navigate('/ups')}>Back to UPS Devices</button>
       </div>
 
-      <div className="detail-metrics">
-        {charge != null && (
-          <div className="detail-metric-card">
-            <Gauge
-              value={Math.min(charge, 100)}
-              label="Battery"
-              size={100}
-              color={getBatteryChargeColor(charge)}
-            />
-          </div>
-        )}
-        {load != null && (
-          <div className="detail-metric-card">
-            <Gauge
-              value={Math.min(load, 100)}
-              label="Load"
-              size={100}
-              color={getLoadColor(load)}
-            />
-          </div>
-        )}
-        <div className="detail-metric-card detail-metric-texts">
-          {runtime != null && <span className="detail-metric-text">Runtime {formatRuntime(runtime)}</span>}
-          {voltage != null && <span className="detail-metric-text">{voltage} V</span>}
-        </div>
+      <div className="tab-bar">
+        <button
+          className={`tab ${activeTab === 'info' ? 'active' : ''}`}
+          onClick={() => setActiveTab('info')}
+        >
+          Info
+        </button>
+        <button
+          className={`tab ${activeTab === 'charts' ? 'active' : ''}`}
+          onClick={() => setActiveTab('charts')}
+        >
+          Charts
+        </button>
       </div>
 
-      <div className="detail-grid">
-        {GROUPS.filter(g => grouped[g.prefix]).map(group => (
-          <div key={group.prefix} className="detail-section">
-            <h3 className="detail-section-title">{group.label}</h3>
-            <div className="detail-items">
-              {grouped[group.prefix]
-                .filter(([key]) => key !== 'battery.charge' && key !== 'ups.load')
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([key, val]) => (
-                    <div key={key} className="detail-item">
-                      <span className="detail-item-label">{niceLabel(key)}</span>
-                      <span className="detail-item-value">{fmtVal(key, val)}</span>
-                    </div>
-                ))}
+      {activeTab === 'info' && (
+        <>
+          <div className="detail-metrics">
+            {charge != null && (
+              <div className="detail-metric-card">
+                <Gauge
+                  value={Math.min(charge, 100)}
+                  label="Battery"
+                  size={100}
+                  color={getBatteryChargeColor(charge)}
+                />
+              </div>
+            )}
+            {load != null && (
+              <div className="detail-metric-card">
+                <Gauge
+                  value={Math.min(load, 100)}
+                  label="Load"
+                  size={100}
+                  color={getLoadColor(load)}
+                />
+              </div>
+            )}
+            <div className="detail-metric-card detail-metric-texts">
+              {runtime != null && <span className="detail-metric-text">Runtime {formatRuntime(runtime)}</span>}
+              {voltage != null && <span className="detail-metric-text">{voltage} V</span>}
             </div>
           </div>
-        ))}
-      </div>
 
-      <details className="detail-raw-toggle">
-        <summary>Show all variables (raw)</summary>
-        <pre className="detail-raw">
-          {Object.entries(detail).map(([k, v]) => `${k}: ${v}`).join('\n')}
-        </pre>
-      </details>
+          <div className="detail-grid">
+            {GROUPS.filter(g => grouped[g.prefix]).map(group => (
+              <div key={group.prefix} className="detail-section">
+                <h3 className="detail-section-title">{group.label}</h3>
+                <div className="detail-items">
+                  {grouped[group.prefix]
+                    .filter(([key]) => key !== 'battery.charge' && key !== 'ups.load')
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([key, val]) => (
+                        <div key={key} className="detail-item">
+                          <span className="detail-item-label">{niceLabel(key)}</span>
+                          <span className="detail-item-value">{fmtVal(key, val)}</span>
+                        </div>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <details className="detail-raw-toggle">
+            <summary>Show all variables (raw)</summary>
+            <pre className="detail-raw">
+              {Object.entries(detail).map(([k, v]) => `${k}: ${v}`).join('\n')}
+            </pre>
+          </details>
+        </>
+      )}
+      {activeTab === 'charts' && (
+        <HistoryChart upsName={upsname} />
+      )}
     </>
   );
 }
