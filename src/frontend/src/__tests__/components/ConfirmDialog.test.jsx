@@ -22,11 +22,16 @@ function ConfirmTester() {
 
 describe('ConfirmDialog', () => {
   it('throws when useConfirm is used outside provider', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     function Bad() {
       useConfirm();
       return null;
     }
-    expect(() => render(<Bad />)).toThrow('useConfirm must be used within ConfirmProvider');
+    try {
+      expect(() => render(<Bad />)).toThrow('useConfirm must be used within ConfirmProvider');
+    } finally {
+      err.mockRestore();
+    }
   });
 
   it('shows confirm dialog and resolves true on Confirm click', async () => {

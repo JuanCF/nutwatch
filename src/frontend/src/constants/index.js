@@ -45,6 +45,12 @@ export const API = {
   WOL_TARGETS: '/wol/targets',
   WOL_MAPPINGS: '/wol/mappings',
   WOL_WAKE_ALL: '/wol/wake-all',
+  history: (ups, range, vars) => {
+    let p = `/history/${encodeURIComponent(ups)}?range=${encodeURIComponent(range)}`;
+    if (vars) p += `&variables=${vars.map(v => encodeURIComponent(v)).join(',')}`;
+    return p;
+  },
+  historyVariables: (ups) => `/history/${encodeURIComponent(ups)}/variables`,
 };
 
 export const DEFAULTS = {

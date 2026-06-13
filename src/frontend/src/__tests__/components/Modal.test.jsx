@@ -15,11 +15,16 @@ function ModalOpener() {
 
 describe('Modal', () => {
   it('throws when useModal is used outside provider', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     function Bad() {
       useModal();
       return null;
     }
-    expect(() => render(<Bad />)).toThrow('useModal must be used within ModalProvider');
+    try {
+      expect(() => render(<Bad />)).toThrow('useModal must be used within ModalProvider');
+    } finally {
+      err.mockRestore();
+    }
   });
 
   it('opens and displays modal content', async () => {

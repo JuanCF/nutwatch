@@ -1,6 +1,7 @@
 import pytest
 from flask import Flask
 
+import routes.history
 import routes.hooks
 import routes.logs
 import routes.system
@@ -24,6 +25,7 @@ def _register_all(app):
     app.register_blueprint(routes.upsmon.upsmon_bp)
     app.register_blueprint(routes.users.users_bp)
     app.register_blueprint(routes.wol.wol_bp)
+    app.register_blueprint(routes.history.history_bp)
     return app
 
 
@@ -582,3 +584,86 @@ def test_wol_delete_mapping_not_found(monkeypatch):
     with app.test_client() as c:
         resp = c.delete("/api/wol/mappings/0")
         assert resp.status_code == 404
+
+
+# ── History routes ─────────────────────────────────────────────────────
+
+def test_history_route(monkeypatch):
+    monkeypatch.setattr(
+        "routes.history.get_history",
+        lambda ups, variables=None, since=0: {
+            "ups": ups,
+            "variables": {"battery.charge": [[1000000, 100]]},
+        },
+    )
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/history/myups?range=24h")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ups"] == "myups"
+        assert "battery.charge" in data["variables"]
+
+
+def test_history_route_invalid_name():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/history/%22%22")
+        assert resp.status_code == 400
+
+
+def test_history_route_invalid_range():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/history/myups?range=bad")
+        assert resp.status_code == 400
+
+
+def test_history_variables_route(monkeypatch):
+    monkeypatch.setattr(
+        "routes.history.get_available_variables",
+        lambda ups: ["battery.charge", "ups.load"],
+    )
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/history/myups/variables")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "battery.charge" in data["variables"]
+
+
+def test_history_route_with_variables(monkeypatch):
+    captured = {}
+    def fake_history(ups, variables=None, since=0):
+        captured["variables"] = variables
+        return {"ups": ups, "variables": {"battery.charge": [[100, 50]]}}
+    monkeypatch.setattr("routes.history.get_history", fake_history)
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/history/myups?range=24h&variables=battery.charge,ups.load")
+        assert resp.status_code == 200
+        assert captured["variables"] == ["battery.charge", "ups.load"]
+
+
+def test_history_route_default_range(monkeypatch):
+    captured = {}
+    def fake_history(ups, variables=None, since=0):
+        captured["since"] = since
+        return {"ups": ups, "variables": {}}
+    monkeypatch.setattr("routes.history.get_history", fake_history)
+    app = _register_all(_make_app())
+    import time
+    before = time.time() - 86400
+    with app.test_client() as c:
+        resp = c.get("/api/history/myups")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["range"] == "24h"
+        assert captured["since"] > before
+
+
+def test_history_variables_route_invalid_name():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/history/%22%22/variables")
+        assert resp.status_code == 400
