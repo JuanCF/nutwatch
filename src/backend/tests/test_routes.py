@@ -586,6 +586,30 @@ def test_wol_delete_mapping_not_found(monkeypatch):
         assert resp.status_code == 404
 
 
+def test_wol_network_hosts(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.scan_network_hosts", lambda: [
+        {"ip": "192.168.1.1", "mac": "AA:BB:CC:DD:EE:FF", "hostname": "router"},
+        {"ip": "192.168.1.100", "mac": "11:22:33:44:55:66", "hostname": ""},
+    ])
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/wol/network-hosts")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data["hosts"]) == 2
+        assert data["hosts"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
+        assert data["hosts"][0]["hostname"] == "router"
+
+
+def test_wol_network_hosts_empty(monkeypatch):
+    monkeypatch.setattr("routes.wol.wol_service.scan_network_hosts", lambda: [])
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/wol/network-hosts")
+        assert resp.status_code == 200
+        assert resp.get_json()["hosts"] == []
+
+
 # ── History routes ─────────────────────────────────────────────────────
 
 def test_history_route(monkeypatch):

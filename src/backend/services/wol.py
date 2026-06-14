@@ -2,10 +2,12 @@ import json
 import logging
 import os
 import re
+import socket
 import grp
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
 
 from config import NUT_DIR
-from utils import read_file, write_file
+from utils import read_file, run_cmd, write_file
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +174,46 @@ def dispatch(upsname: str, event: str) -> None:
                     send_wol(target_name)
                 except Exception as e:
                     logger.exception("WOL dispatch failed for %s/%s -> %s", upsname, event, target_name)
+
+
+def _resolve_hostname(ip: str) -> str:
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except OSError:
+        return ''
+
+
+def scan_network_hosts() -> list:
+    """Return hosts from the ARP cache with their MAC addresses and hostnames."""
+    hosts = []
+    try:
+        rc, stdout, _ = run_cmd(["ip", "neigh", "show"], timeout=5)
+        if rc != 0:
+            return []
+        ip_mac_re = re.compile(r'^(\d+\.\d+\.\d+\.\d+)\s.*lladdr\s+([0-9a-fA-F:]{17})', re.MULTILINE)
+        for m in ip_mac_re.finditer(stdout):
+            hosts.append({'ip': m.group(1), 'mac': m.group(2).upper(), 'hostname': ''})
+    except Exception:
+        return []
+
+    if not hosts:
+        return []
+
+    with ThreadPoolExecutor(max_workers=min(len(hosts), 10)) as ex:
+        futures = {ex.submit(_resolve_hostname, h['ip']): h for h in hosts}
+        try:
+            for fut in as_completed(futures, timeout=2.0):
+                host = futures[fut]
+                try:
+                    host['hostname'] = fut.result()
+                except Exception:
+                    pass
+        except FutureTimeoutError:
+            for fut in futures:
+                if not fut.done():
+                    fut.cancel()
+
+    return hosts
 
 
 def cleanup_for_ups(upsname: str) -> None:

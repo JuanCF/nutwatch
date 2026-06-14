@@ -1,4 +1,4 @@
-# NutWatch — NUT Web Administration Panel
+<h1><img src="assets/icons/logo-mark.svg" alt="" width="76" valign="middle"> NutWatch — NUT Web Administration Panel</h1>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -23,7 +23,7 @@ This repository also includes `vm/nut-vm.sh`, a bash script to automatically cre
 - **Per-UPS Event Hooks** — Fine-grained script hooks per UPS per event (ONLINE, ONBATT, LOWBATT, COMMOK, COMMBAD, SHUTDOWN, REPLBATT, NOCOMM, NOPARENT) with in-browser script editor (Tab support), status badges, and instant save/delete
 - **Live Log Streaming** — Real-time SSE log viewer tailing nut-server, nut-monitor, and nut-driver journals with pause/resume, auto-scroll, color-coded lines (error/warn/info), and configurable recent log loading
 - **Config Files** — Raw in-browser editor for ups.conf, upsd.conf, upsmon.conf, and upsd.users (read-only via this endpoint)
-- **Wake on LAN** — Manage WOL targets (MAC, broadcast, description), create event-to-target mappings for automatic wake on UPS events (ONLINE, ONBATT, etc.), manual "Wake Now" and "Wake All" buttons, and non-destructive auto-dispatch via notifycmd.sh
+- **Wake on LAN** — Manage WOL targets (MAC, broadcast, description), create event-to-target mappings for automatic wake on UPS events (ONLINE, ONBATT, etc.), manual "Wake Now" and "Wake All" buttons, and non-destructive auto-dispatch via notifycmd.sh; MAC address field shows a dropdown of hosts discovered from the ARP cache (with hostnames via reverse DNS) and auto-suggests the target name from the hostname
 - **Service Management** — One-click restart (nut-server, nut-monitor, or both) and per-UPS driver start/stop/restart with multi-fallback cleanup (upsdrvctl, systemctl, PID kill, pkill)
 - **Bearer Token Auth** — API authentication via `NUTWATCH_API_KEY` env var; when unset, auth is disabled
 - **Atomic Config Writes** — All file writes use `tempfile` + `os.replace` to prevent corruption
@@ -281,6 +281,7 @@ Allowed files: `ups.conf`, `upsd.conf`, `upsmon.conf`, `upsd.users`
 | `GET` | `/api/wol/mappings` | List all event mappings |
 | `POST` | `/api/wol/mappings` | Create an event mapping |
 | `DELETE` | `/api/wol/mappings/<id>` | Delete an event mapping |
+| `GET` | `/api/wol/network-hosts` | List ARP-cache hosts (IP, MAC, hostname) for MAC suggestions |
 
 ---
 
@@ -342,7 +343,7 @@ sudo NUT_UPS_NAME="myups" NUT_ADMIN_PASS="securepass" AUTO=1 bash scripts/setup.
 | `NUT_MONITOR_PASS` | _(auto-gen)_ | NUT monitor password |
 | `NUT_LISTEN_ADDR` | `0.0.0.0` | NUT listen address |
 | `NUT_LISTEN_PORT` | `3493` | NUT listen port |
-| `NUTWATCH_REF` | `v1.1.0` | NutWatch release tag |
+| `NUTWATCH_REF` | `v1.1.1` | NutWatch release tag |
 | `NUTWATCH_URL_PREFIX` | _(unset)_ | Override tarball URL for local testing |
 | `NUTWATCH_API_KEY` | _(empty)_ | Bearer token for NutWatch API auth |
 
@@ -418,7 +419,7 @@ COMMUNITY_SCRIPTS_URL=https://my-mirror.example.com bash vm/nut-vm.sh
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NUTWATCH_REF` | `v1.1.0` | Git tag for release download URL |
+| `NUTWATCH_REF` | `v1.1.1` | Git tag for release download URL |
 | `NUTWATCH_URL_PREFIX` | _(unset)_ | Override URL for testing local builds |
 | `NUTWATCH_API_KEY` | _(empty)_ | Bearer token for NutWatch API auth |
 

@@ -5,10 +5,19 @@ import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
 import type { WolTargetsMap, WolTargetWithName, WolMapping, UpsDevice } from '../types';
 
+interface NetworkHost {
+  ip: string;
+  mac: string;
+  hostname: string;
+}
+
 interface TargetModalProps {
   target?: WolTargetWithName;
   onSaved: () => void;
 }
+
+const MAC_REGEX = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+const IDENT_START = /^[A-Za-z]/;
 
 function TargetModal({ target, onSaved }: TargetModalProps) {
   const { closeModal } = useModal();
@@ -18,15 +27,36 @@ function TargetModal({ target, onSaved }: TargetModalProps) {
   const [description, setDescription] = useState(target?.description ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [networkHosts, setNetworkHosts] = useState<NetworkHost[]>([]);
 
   const isEdit = !!target;
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await api<{ hosts: NetworkHost[] }>(API.WOL_NETWORK_HOSTS);
+        setNetworkHosts(r.hosts ?? []);
+      } catch {
+        // silently ignore — input still works as plain text
+      }
+    })();
+  }, []);
+
+  function handleMacChange(value: string) {
+    setMac(value);
+    if (!isEdit && !name && MAC_REGEX.test(value)) {
+      const host = networkHosts.find(h => h.mac.toLowerCase() === value.toLowerCase());
+      if (host?.hostname && IDENT_START.test(host.hostname)) {
+        setName(host.hostname.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64));
+      }
+    }
+  }
 
   async function handleSave() {
     setError('');
     if (!name.trim()) { setError('Name is required'); return; }
     if (!mac.trim()) { setError('MAC is required'); return; }
-    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
-    if (!macRegex.test(mac.trim())) { setError('Invalid MAC address format (e.g. AA:BB:CC:DD:EE:FF)'); return; }
+    if (!MAC_REGEX.test(mac.trim())) { setError('Invalid MAC address format (e.g. AA:BB:CC:DD:EE:FF)'); return; }
     setSaving(true);
     try {
       if (isEdit) {
@@ -61,7 +91,20 @@ function TargetModal({ target, onSaved }: TargetModalProps) {
       </div>
       <div className="field">
         <label>MAC Address</label>
-        <input type="text" value={mac} onChange={e => setMac(e.target.value)} placeholder="AA:BB:CC:DD:EE:FF" />
+        <input
+          type="text"
+          value={mac}
+          onChange={e => handleMacChange(e.target.value)}
+          list="wol-mac-suggestions"
+          placeholder="AA:BB:CC:DD:EE:FF"
+        />
+        <datalist id="wol-mac-suggestions">
+          {networkHosts.map(h => (
+            <option key={h.mac} value={h.mac}>
+              {h.hostname ? `${h.hostname} (${h.ip})` : h.ip}
+            </option>
+          ))}
+        </datalist>
       </div>
       <div className="field">
         <label>Broadcast Address</label>

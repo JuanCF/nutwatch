@@ -126,3 +126,9 @@ def delete_mapping(index):
     if not wol_service.delete_mapping(index):
         return jsonify({"error": "not found"}), 404
     return jsonify({"ok": True})
+
+
+@wol_bp.route("/api/wol/network-hosts", methods=["GET"])
+@require_admin
+def list_network_hosts():
+    return jsonify({"hosts": wol_service.scan_network_hosts()})
