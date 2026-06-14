@@ -8,3 +8,11 @@ src/frontend/dist/
 
 # Generated static files (Vite build output)
 src/backend/static/
+
+# Frontend generated TypeScript build artifacts
+src/frontend/vite.config.js
+src/frontend/vitest.config.js
+src/frontend/vite.config.d.ts
+src/frontend/vitest.config.d.ts
+src/frontend/tsconfig.node.tsbuildinfo
+src/frontend/tsconfig.tsbuildinfo
