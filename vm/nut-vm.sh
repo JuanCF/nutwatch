@@ -30,7 +30,7 @@ DISK_SIZE="8"
 
 # These functions are fetched at runtime; shellcheck cannot statically analyze them.
 # shellcheck disable=SC1090
-COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://git.community-scripts.org/community-scripts/ProxmoxVED/raw/branch/main}"
+COMMUNITY_SCRIPTS_URL="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main"
 
 # shellcheck disable=SC1090,SC2046
 source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/api.func")"
@@ -39,7 +39,6 @@ source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/vm-core.func")"
 # shellcheck disable=SC1090,SC2046
 source /dev/stdin <<<"$(curl -fsSL "$COMMUNITY_SCRIPTS_URL/misc/cloud-init.func")"
 
-load_api_functions
 color
 formatting
 icons
