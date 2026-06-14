@@ -45,7 +45,8 @@ describe('ConfirmDialog', () => {
     expect(screen.getByText('Are you sure?')).toBeInTheDocument();
     const dialogButtons = screen.getAllByRole('button');
     const confirmBtn = dialogButtons.find(b => b.textContent === 'Confirm' && b.className.includes('primary'));
-    await user.click(confirmBtn!);
+    if (!confirmBtn) throw new Error('Confirm button (primary) not found in dialog');
+    await user.click(confirmBtn);
     expect(document.body.dataset.result).toBe('true');
   });
 

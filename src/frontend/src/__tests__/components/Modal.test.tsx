@@ -48,7 +48,8 @@ describe('Modal', () => {
     );
     await user.click(screen.getByText('Open'));
     expect(screen.getByText('modal content')).toBeInTheDocument();
-    const overlay = document.querySelector('.modal-overlay') as Element;
+    const overlay = document.querySelector('.modal-overlay');
+    if (!overlay) throw new Error('Modal overlay element not found');
     await user.click(overlay);
     expect(screen.queryByText('modal content')).not.toBeInTheDocument();
   });
