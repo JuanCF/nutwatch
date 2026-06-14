@@ -7,7 +7,7 @@ Two components in this repo:
 | `vm/nut-vm.sh` | Proxmox VM creation + NUT installer script | Proxmox host (as root) |
 | `src/backend/` | NutWatch (modular Flask web UI for NUT config management) | Inside the VM or standalone Linux host |
 
-`plan.md` is a historical design spec — do **not** trust it literally; verify behavior in the actual scripts.
+`plan.md` is a historical design spec — do **not** trust it literally; verify behavior in the actual scripts. `CONTRIBUTING.md` has the version bump checklist and tag conventions.
 
 ## Developer Commands
 
