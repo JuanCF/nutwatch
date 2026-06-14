@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { api } from '../api';
 import { API } from '../constants';
 
@@ -41,7 +41,7 @@ function formatTooltipTime(ts: number): string {
   return new Date(ts * 1000).toLocaleString();
 }
 
-function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[], range: string) {
+function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[], range: string, clipId: string) {
   const svg = svgEl;
 
   const margin = { top: 20, right: 20, bottom: 40, left: 60 };
@@ -83,7 +83,7 @@ function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[]
 
   const defs = document.createElementNS(ns, 'defs');
   const clip = document.createElementNS(ns, 'clipPath');
-  clip.setAttribute('id', 'chart-clip');
+  clip.setAttribute('id', clipId);
   const clipRect = document.createElementNS(ns, 'rect');
   clipRect.setAttribute('x', String(margin.left));
   clipRect.setAttribute('y', String(margin.top));
@@ -94,7 +94,7 @@ function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[]
   content.appendChild(defs);
 
   const chartArea = document.createElementNS(ns, 'g');
-  chartArea.setAttribute('clip-path', 'url(#chart-clip)');
+  chartArea.setAttribute('clip-path', `url(#${clipId})`);
   content.appendChild(chartArea);
 
   const gridGroup = document.createElementNS(ns, 'g');
@@ -287,9 +287,12 @@ export default function HistoryChart({ upsName }: HistoryChartProps) {
   const [data, setData] = useState<SeriesMap | null>(null);
   const [loading, setLoading] = useState(true);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const clipId = useId();
 
   useEffect(() => {
     let cancelled = false;
+    setAvailableVars([]);
+    setSelectedVars({});
     setLoading(true);
     api<{ variables?: string[] }>(API.historyVariables(upsName))
       .then(res => {
@@ -332,9 +335,9 @@ export default function HistoryChart({ upsName }: HistoryChartProps) {
   useEffect(() => {
     if (!loading && data && svgRef.current) {
       const activeVars = Object.entries(selectedVars).filter(([, v]) => v).map(([k]) => k);
-      drawChart(svgRef.current, data, activeVars, range);
+      drawChart(svgRef.current, data, activeVars, range, clipId);
     }
-  }, [data, loading, selectedVars, range]);
+  }, [data, loading, selectedVars, range, clipId]);
 
   const toggleVar = useCallback((v: string) => {
     setSelectedVars(prev => ({ ...prev, [v]: !prev[v] }));

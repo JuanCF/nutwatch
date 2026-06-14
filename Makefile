@@ -41,10 +41,10 @@ test-frontend:
 	cd src/frontend && npm ci && npm test
 
 lint-frontend:
-	cd src/frontend && npm run lint
+	cd src/frontend && npm ci && npm run lint
 
 tsc-check:
-	cd src/frontend && npm run tsc-check
+	cd src/frontend && npm ci && npm run tsc-check
 
 install-tools:
 	sudo apt-get install -y shellcheck shfmt python3-pytest nodejs npm

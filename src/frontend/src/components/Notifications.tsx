@@ -17,6 +17,7 @@ interface NotifyForm {
 
 export default function Notifications() {
   const [config, setConfig] = useState<UpsmonConfig | null>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [upsNames, setUpsNames] = useState<string[]>([]);
   const [monitors, setMonitors] = useState<MonitorRow[]>([]);
   const [saving, setSaving] = useState(false);
@@ -42,6 +43,7 @@ export default function Notifications() {
     ]).then(([cfg, ups]) => {
       if (cancelled) return;
       setConfig(cfg);
+      setConfigLoaded(true);
       setUpsNames(ups.map(u => u.name));
       if (cfg) {
         setMonitors((cfg.monitors ?? []).map(m => ({
@@ -187,8 +189,12 @@ export default function Notifications() {
     }
   }
 
-  if (!config) {
+  if (!configLoaded) {
     return <div className="empty">Loading notifications configuration...</div>;
+  }
+
+  if (!config) {
+    return <div className="empty">Failed to load notifications configuration.</div>;
   }
 
   return (

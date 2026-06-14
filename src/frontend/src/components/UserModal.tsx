@@ -26,6 +26,10 @@ export default function UserModal({ mode, user, onSaved }: UserModalProps) {
   async function handleSave() {
     if (savePending.current) return;
     const trimmedName = name.trim();
+    if (!trimmedName) {
+      await alert('Username is required', 'Validation Error');
+      return;
+    }
     if (!isEdit && !password) {
       await alert('Password is required for new users', 'Validation Error');
       return;

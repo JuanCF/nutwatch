@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test-watch": "vitest",
     "lint": "eslint .",
-    "tsc-check": "tsc --noEmit"
+    "tsc-check": "tsc -b"
   },
   "dependencies": {
     "d3": "^7.9.0",

@@ -71,7 +71,12 @@ function SkeletonDetail() {
 export default function UpsDetail() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const upsname = decodeURIComponent(name ?? '');
+  let upsname: string;
+  try {
+    upsname = decodeURIComponent(name ?? '');
+  } catch {
+    upsname = name ?? '';
+  }
   const [detail, setDetail] = useState<UpsDetailData | null>(null);
   const [ups, setUps] = useState<UpsDevice | null>(null);
   const [loading, setLoading] = useState(true);

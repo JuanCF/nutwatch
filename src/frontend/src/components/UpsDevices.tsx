@@ -70,24 +70,23 @@ export default function UpsDevices() {
       const ok = await dangerConfirm('Delete UPS "' + name + '"? This will stop the driver and remove all configuration.');
       if (!ok) return;
       await api(API.ups(name), { method: 'DELETE' });
+      try {
+        const list = await api<UpsDevice[]>(API.UPS);
+        const r = list.length === 0
+          ? await api<CommandResult>(API.SERVICE_RESTART_MONITOR, { method: 'POST' })
+          : await api<CommandResult>(API.SERVICE_RESTART_ALL, { method: 'POST' });
+        if (r.returncode !== 0) {
+          await alert('Service restart warning:\n' + (r.stderr ?? r.stdout ?? ''), 'Restart Warning');
+        }
+      } catch (e) {
+        await alert('Restart failed — changes may not be fully applied:\n' + (e as Error).message, 'Restart Error');
+      }
+      void loadUps();
     } catch (e) {
       await alert('Failed to delete UPS:\n' + (e as Error).message, 'Error');
-      return;
     } finally {
       delete deletePending.current[key];
     }
-    try {
-      const list = await api<UpsDevice[]>(API.UPS);
-      const r = list.length === 0
-        ? await api<CommandResult>(API.SERVICE_RESTART_MONITOR, { method: 'POST' })
-        : await api<CommandResult>(API.SERVICE_RESTART_ALL, { method: 'POST' });
-      if (r.returncode !== 0) {
-        await alert('Service restart warning:\n' + (r.stderr ?? r.stdout ?? ''), 'Restart Warning');
-      }
-    } catch (e) {
-      await alert('Restart failed — changes may not be fully applied:\n' + (e as Error).message, 'Restart Error');
-    }
-    void loadUps();
   }
 
   function handleEdit(ups: UpsDevice) {

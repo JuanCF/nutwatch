@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import Dashboard from '../../components/Dashboard';
+import { API } from '../../constants';
 
 vi.mock('../../api', () => ({
   api: vi.fn(),
@@ -22,7 +23,7 @@ const MOCK_SERVICES = {
   'nut-driver@ups1': { active: true, state: 'running' },
 };
 
-const MOCK_DETAILS = {
+const MOCK_DETAILS: Record<string, unknown> = {
   ups1: { 'battery.charge': 85, 'ups.load': 32 },
   ups2: { 'battery.charge': 22, 'ups.load': 95 },
 };
@@ -30,20 +31,17 @@ const MOCK_DETAILS = {
 describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
+    mockApi.mockImplementation((url: string) => {
+      if (url === API.UPS) return Promise.resolve(MOCK_UPS_LIST);
+      if (url === API.USERS) return Promise.resolve(MOCK_USERS);
+      if (url === API.SERVICE_STATUS) return Promise.resolve(MOCK_SERVICES);
+      const match = url.match(/\/ups\/([^/]+)\/detail/);
+      if (match) return Promise.resolve(MOCK_DETAILS[match[1]] ?? null);
+      return Promise.resolve(null);
+    });
   });
 
   it('renders stat cards with counts', async () => {
-    mockApi
-      .mockResolvedValueOnce(MOCK_UPS_LIST)
-      .mockResolvedValueOnce(MOCK_USERS)
-      .mockResolvedValueOnce(MOCK_SERVICES)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups1)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups2);
-
     render(<Dashboard />);
     await waitFor(() => {
       const twos = screen.getAllByText('2');
@@ -55,13 +53,6 @@ describe('Dashboard', () => {
   });
 
   it('shows UPS table with gauge values', async () => {
-    mockApi
-      .mockResolvedValueOnce(MOCK_UPS_LIST)
-      .mockResolvedValueOnce(MOCK_USERS)
-      .mockResolvedValueOnce(MOCK_SERVICES)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups1)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups2);
-
     render(<Dashboard />);
     await waitFor(() => expect(screen.getByText('ups1')).toBeInTheDocument());
     await waitFor(() => {
@@ -71,10 +62,10 @@ describe('Dashboard', () => {
   });
 
   it('shows empty state when no UPS devices', async () => {
-    mockApi
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(MOCK_USERS)
-      .mockResolvedValueOnce(MOCK_SERVICES);
+    mockApi.mockImplementation((url: string) => {
+      if (url === API.UPS) return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
 
     render(<Dashboard />);
     await waitFor(() => {
@@ -83,13 +74,6 @@ describe('Dashboard', () => {
   });
 
   it('shows services list', async () => {
-    mockApi
-      .mockResolvedValueOnce(MOCK_UPS_LIST)
-      .mockResolvedValueOnce(MOCK_USERS)
-      .mockResolvedValueOnce(MOCK_SERVICES)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups1)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups2);
-
     render(<Dashboard />);
     await waitFor(() => {
       expect(screen.getByText('nut-server')).toBeInTheDocument();
@@ -98,13 +82,6 @@ describe('Dashboard', () => {
   });
 
   it('shows user count from users list', async () => {
-    mockApi
-      .mockResolvedValueOnce(MOCK_UPS_LIST)
-      .mockResolvedValueOnce(MOCK_USERS)
-      .mockResolvedValueOnce(MOCK_SERVICES)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups1)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups2);
-
     render(<Dashboard />);
     await waitFor(() => {
       const twos = screen.getAllByText('2');
@@ -113,15 +90,17 @@ describe('Dashboard', () => {
   });
 
   it('shows Degraded health when core service is inactive', async () => {
-    mockApi
-      .mockResolvedValueOnce(MOCK_UPS_LIST)
-      .mockResolvedValueOnce(MOCK_USERS)
-      .mockResolvedValueOnce({
+    mockApi.mockImplementation((url: string) => {
+      if (url === API.UPS) return Promise.resolve(MOCK_UPS_LIST);
+      if (url === API.USERS) return Promise.resolve(MOCK_USERS);
+      if (url === API.SERVICE_STATUS) return Promise.resolve({
         'nut-server': { active: false, state: 'dead' },
         'nut-monitor': { active: true, state: 'running' },
-      })
-      .mockResolvedValueOnce(MOCK_DETAILS.ups1)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups2);
+      });
+      const match = url.match(/\/ups\/([^/]+)\/detail/);
+      if (match) return Promise.resolve(MOCK_DETAILS[match[1]] ?? null);
+      return Promise.resolve(null);
+    });
 
     render(<Dashboard />);
     await waitFor(() => {
@@ -130,15 +109,17 @@ describe('Dashboard', () => {
   });
 
   it('shows Failed health when a service is in failed state', async () => {
-    mockApi
-      .mockResolvedValueOnce(MOCK_UPS_LIST)
-      .mockResolvedValueOnce(MOCK_USERS)
-      .mockResolvedValueOnce({
+    mockApi.mockImplementation((url: string) => {
+      if (url === API.UPS) return Promise.resolve(MOCK_UPS_LIST);
+      if (url === API.USERS) return Promise.resolve(MOCK_USERS);
+      if (url === API.SERVICE_STATUS) return Promise.resolve({
         'nut-server': { active: true, state: 'failed' },
         'nut-monitor': { active: true, state: 'running' },
-      })
-      .mockResolvedValueOnce(MOCK_DETAILS.ups1)
-      .mockResolvedValueOnce(MOCK_DETAILS.ups2);
+      });
+      const match = url.match(/\/ups\/([^/]+)\/detail/);
+      if (match) return Promise.resolve(MOCK_DETAILS[match[1]] ?? null);
+      return Promise.resolve(null);
+    });
 
     render(<Dashboard />);
     await waitFor(() => {
