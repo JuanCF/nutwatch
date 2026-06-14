@@ -11,7 +11,7 @@
 #   AUTO=1 bash scripts/setup.sh                   # non-interactive, defaults/auto-generated passwords
 #
 # Shared environment variables:
-#   NUTWATCH_REF        — NutWatch release tag (default: v1.0.1)
+#   NUTWATCH_REF        — NutWatch release tag (default: v1.1.0)
 #   NUTWATCH_URL_PREFIX — override tarball URL for local testing
 #   NUTWATCH_API_KEY    — Bearer token for NutWatch API auth (default: empty = no auth)
 #
@@ -712,7 +712,7 @@ main() {
     echo ""
     echo "Environment variables:"
     echo "  AUTO=1          — non-interactive mode (fresh install only)"
-    echo "  NUTWATCH_REF    — release tag (default: v1.0.1)"
+    echo "  NUTWATCH_REF    — release tag (default: v1.1.0)"
     echo "  NUTWATCH_API_KEY — Bearer token for NutWatch API auth"
     echo ""
     echo "See file header for full list of env vars."

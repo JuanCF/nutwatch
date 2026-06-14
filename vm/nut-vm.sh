@@ -172,7 +172,7 @@ readonly UBUNTU_IMG_NAME="ubuntu-24.04-minimal-cloudimg-amd64.img"
 readonly IMG_CACHE_DIR="/var/lib/vz/template/cache"
 readonly NUT_DEFAULT_PORT=3493
 readonly SCRIPT_VERSION="1.0.0"
-readonly NUTWATCH_REF="${NUTWATCH_REF:-v1.0.1}"
+readonly NUTWATCH_REF="${NUTWATCH_REF:-v1.1.0}"
 readonly NUTWATCH_RELEASES_URL="https://github.com/JuanCF/nutwatch/releases/download/${NUTWATCH_REF}"
 
 # UPS Vendor IDs
