@@ -16,7 +16,8 @@ This repository also includes `vm/nut-vm.sh`, a bash script to automatically cre
 
 - **Dashboard** — System overview with stat cards (UPS count, users, active services, system health) and quick-lists for all UPS devices and NUT services
 - **UPS Devices** — CRUD management with card-grid view showing real-time telemetry (battery charge bar, load bar, runtime, voltage), per-card driver start/stop/restart, USB scan integration, and recommended config defaults
-- **UPS Detail Telemetry** — Deep-dive view grouped by subsystem (Battery, Input, Output, UPS, Device, Driver) with color-coded charge/load bars, unit-formatted values (V, Hz, W, VA, °C, A), runtime formatting, and raw variable dump
+- **UPS Detail Telemetry** — Deep-dive view grouped by subsystem (Battery, Input, Output, UPS, Device, Driver) with color-coded charge/load bars, unit-formatted values (V, Hz, W, VA, °C, A), runtime formatting, and raw variable dump; D3 gauge visualizations for battery charge and load
+- **Historical Data & Charts** — Per-UPS time-series data collected every 60 seconds into SQLite, displayed as D3 line charts with selectable ranges (1h, 24h, 7d, 30d) and per-variable filtering; configurable poll interval and 90-day retention
 - **Users** — CRUD for NUT daemon users (upsd.users) with password masking and per-user roles (master/slave/admin)
 - **Notifications** — Full upsmon.conf editor with monitor line management (add/remove/edit per UPS), global commands (MINSUPPLIES, SHUTDOWNCMD, NOTIFYCMD, POWERDOWNFLAG), timing parameters grid (POLLFREQ, POLLFREQALERT, HOSTSYNC, DEADTIME, etc.), and notification message/flag matrix for all 9 events with SYSLOG/WALL/EXEC/IGNORE checkboxes
 - **Per-UPS Event Hooks** — Fine-grained script hooks per UPS per event (ONLINE, ONBATT, LOWBATT, COMMOK, COMMBAD, SHUTDOWN, REPLBATT, NOCOMM, NOPARENT) with in-browser script editor (Tab support), status badges, and instant save/delete
@@ -55,10 +56,11 @@ This repository also includes `vm/nut-vm.sh`, a bash script to automatically cre
 ### CI/CD & Developer Tooling
 
 - **GitHub Actions** — Lint (shellcheck, shfmt), Python syntax check (py_compile), pytest, frontend tests (Vitest), and automated release workflow on tag push
-- **Makefile** — `check`, `lint`, `fmt`, `fmt-fix`, `lint-python`, `test-python`, `build-frontend`, `build-tarball`, `install-tools`
+- **Makefile** — `check`, `lint`, `fmt`, `fmt-fix`, `lint-python`, `test-python`, `tsc-check`, `lint-frontend`, `build-frontend`, `build-tarball`, `install-tools`
 - **`build-tarball`** — Creates `nutwatch.tar.gz` for release distribution (git-ignored)
 - **Backend Tests** — Pytest suite covering parsers, service layer (UPS, users, upsmon, hooks, WOL, system), auth, route handlers, and utility functions
 - **Frontend Tests** — Vitest suite covering components (Badge, Modal, ConfirmDialog, ErrorBoundary, theme) and utilities (API, format, logs, directives, service)
+- **TypeScript** — Strict mode (`strict: true`, `noUnusedLocals`, `noUnusedParameters`) with ESLint flat config; `tsc --noEmit` and `eslint .` run as part of `make check`
 
 ---
 
@@ -115,7 +117,8 @@ src/backend/
 │   ├── upsmon.py        # Full upsmon.conf read/write with validation
 │   ├── hooks.py         # Per-UPS event hook file management
 │   ├── system.py        # Service/driver restart, config file raw I/O
-│   └── wol.py           # WOL target/event registry, magic packet dispatch
+│   ├── wol.py           # WOL target/event registry, magic packet dispatch
+│   └── history.py       # SQLite collection, retention, and range queries
 ├── routes/              # Flask blueprints (API endpoints)
 │   ├── ups.py
 │   ├── users.py
@@ -123,7 +126,8 @@ src/backend/
 │   ├── hooks.py
 │   ├── system.py
 │   ├── logs.py          # SSE log streaming + recent log fetch
-│   └── wol.py           # WOL target and event-mapping CRUD endpoints
+│   ├── wol.py           # WOL target and event-mapping CRUD endpoints
+│   └── history.py       # Historical time-series data endpoints
 ├── static/              # Built React SPA (index.html + assets/)
 ├── tests/
 │   ├── test_parsers.py           # Parser roundtrip tests
@@ -135,6 +139,7 @@ src/backend/
 │   ├── test_services_upsmon.py   # Upsmon config tests
 │   ├── test_services_users.py    # User CRUD tests
 │   ├── test_services_wol.py      # WOL target/mapping tests
+│   ├── test_services_history.py  # History collection/query tests
 │   └── test_utils.py             # Utility function tests
 ├── scripts/
 │   ├── notifycmd.sh          # UPS event notify dispatcher (hooks + WOL)
@@ -147,35 +152,43 @@ src/backend/
 
 ```text
 src/frontend/src/
-├── App.jsx              # Root component with section routing
-├── api.js               # Fetch wrapper for /api/*
-├── constants/index.js   # Section IDs, API paths, event lists, defaults
-├── theme.jsx            # Light/dark theme provider
+├── App.tsx              # Root component with section routing
+├── api.ts               # Fetch wrapper for /api/* (generic typed)
+├── types.ts             # Shared TypeScript interfaces and types
+├── constants/index.ts   # Section IDs, API paths, event lists, defaults
+├── theme.tsx            # Light/dark theme provider
+├── styles/
+│   ├── base.css         # Global resets and base styles
+│   ├── components.css   # Shared component styles
+│   └── variables.css    # CSS custom properties (colors, spacing)
 ├── components/
-│   ├── Dashboard.jsx    # Stat cards + UPS/services overview
-│   ├── UpsDevices.jsx   # UPS card grid + scan/add/edit/delete
-│   ├── UpsCard.jsx      # Individual UPS card with metrics & actions
-│   ├── UpsDetail.jsx    # Deep-dive telemetry grouped by subsystem
-│   ├── UpsModal.jsx     # Add/edit UPS form with recommended defaults
-│   ├── Users.jsx        # User table with CRUD
-│   ├── UserModal.jsx    # Add/edit user form
-│   ├── Notifications.jsx # Full upsmon.conf editor (monitors, messages, flags, timing)
-│   ├── HooksSection.jsx # Per-UPS event hook table
-│   ├── HookEditor.jsx   # In-browser script editor with Tab support
-│   ├── Logs.jsx         # Live SSE log viewer with pause/auto-scroll
-│   ├── WakeOnLan.jsx    # WOL target registry + event mapping management
-│   ├── ConfigFiles.jsx  # Raw config file editor
-│   ├── ServiceStatus.jsx # Service active/inline status bar
-│   ├── Sidebar.jsx      # Navigation sidebar
-│   ├── Badge.jsx        # Status badge (online/onbatt/offline/unknown)
-│   ├── Modal.jsx        # Reusable modal dialog system
-│   ├── ConfirmDialog.jsx # Confirm/alert/dangerConfirm dialog system
-│   └── ThemeSettings.jsx # Theme toggle UI
+│   ├── Dashboard.tsx    # Stat cards + UPS/services overview
+│   ├── UpsDevices.tsx   # UPS card grid + scan/add/edit/delete
+│   ├── UpsCard.tsx      # Individual UPS card with metrics & actions
+│   ├── UpsDetail.tsx    # Deep-dive telemetry grouped by subsystem
+│   ├── UpsModal.tsx     # Add/edit UPS form with recommended defaults
+│   ├── Gauge.tsx        # D3 gauge for battery charge and load
+│   ├── HistoryChart.tsx # D3 line charts with time-range selector
+│   ├── Users.tsx        # User table with CRUD
+│   ├── UserModal.tsx    # Add/edit user form
+│   ├── Notifications.tsx # Full upsmon.conf editor (monitors, messages, flags, timing)
+│   ├── HooksSection.tsx # Per-UPS event hook table
+│   ├── HookEditor.tsx   # In-browser script editor with Tab support
+│   ├── Logs.tsx         # Live SSE log viewer with pause/auto-scroll
+│   ├── WakeOnLan.tsx    # WOL target registry + event mapping management
+│   ├── ConfigFiles.tsx  # Raw config file editor
+│   ├── ServiceStatus.tsx # Service active/inline status bar
+│   ├── Sidebar.tsx      # Navigation sidebar
+│   ├── Badge.tsx        # Status badge (online/onbatt/offline/unknown)
+│   ├── Modal.tsx        # Reusable modal dialog system
+│   ├── ConfirmDialog.tsx # Confirm/alert/dangerConfirm dialog system
+│   └── ThemeSettings.tsx # Theme toggle UI
 └── utils/
-    ├── directives.js    # Key=value directive parsing/formatting
-    ├── format.js        # Runtime seconds → "Xh Ym" formatter
-    ├── logs.js          # Log line color classification
-    └── service.js       # Service status → badge class mapping
+    ├── directives.ts    # Key=value directive parsing/formatting
+    ├── format.ts        # Runtime seconds → "Xh Ym" formatter
+    ├── logs.ts          # Log line color classification
+    ├── metrics.ts       # UPS variable selection and chart data helpers
+    └── service.ts       # Service status → badge class mapping
 ```
 
 ---
@@ -247,6 +260,13 @@ Allowed files: `ups.conf`, `upsd.conf`, `upsmon.conf`, `upsd.users`
 |--------|------|-------------|
 | `GET` | `/api/logs/recent?lines=N` | Recent N lines from NUT journals |
 | `GET` | `/api/logs/stream` | SSE stream tailing nut-server + nut-monitor + nut-driver |
+
+### History
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/history/<ups>?range=<range>&variables=<vars>` | Time-series snapshots (ranges: 1h, 24h, 7d, 30d) |
+| `GET` | `/api/history/<ups>/variables` | Available tracked variables for a UPS |
 
 ### Wake on LAN
 
@@ -391,6 +411,8 @@ COMMUNITY_SCRIPTS_URL=https://my-mirror.example.com bash vm/nut-vm.sh
 | `NUTWATCH_API_KEY` | _(empty)_ | Bearer token for API auth. If empty, auth is disabled. |
 | `NUTWATCH_HOST` | `0.0.0.0` | Listen address for the web server |
 | `NUTWATCH_PORT` | `8081` | Listen port for the web server |
+| `NUTWATCH_HISTORY_INTERVAL` | `60` | Seconds between UPS variable snapshots |
+| `NUTWATCH_HISTORY_RETENTION_DAYS` | `90` | Days of history to retain in SQLite |
 
 #### scripts/setup.sh (--install-only mode)
 
@@ -516,7 +538,6 @@ Contributions welcome! Please feel free to submit a Pull Request.
 ## Support
 
 - Open an [issue](https://github.com/JuanCF/nutwatch/issues)
-- Proxmox Forums: https://forum.proxmox.com/
 - NUT Users Mailing List: https://alioth-lists.debian.net/lists/lists.alioth.debian.net
 
 ---

@@ -1,6 +1,6 @@
 SHELL_FILES := $(shell find vm/ src/backend/ scripts/ -name "*.sh")
 
-.PHONY: check lint fmt fmt-fix install-tools lint-python test-python test-frontend build-tarball build-frontend
+.PHONY: check lint fmt fmt-fix install-tools lint-python test-python frontend-install test-frontend lint-frontend tsc-check build-tarball build-frontend
 
 TARBALL := nutwatch.tar.gz
 TARBALL_DIR := src/backend
@@ -20,7 +20,7 @@ build-tarball: build-frontend
 		static/ scripts/ \
 		nutwatch.service requirements.txt
 
-check: lint fmt lint-python test-python test-frontend
+check: lint fmt lint-python test-python tsc-check lint-frontend test-frontend
 
 lint:
 	shellcheck $(SHELL_FILES)
@@ -37,8 +37,17 @@ lint-python:
 test-python:
 	cd src/backend && python3 -m pytest tests/ -v
 
-test-frontend:
-	cd src/frontend && npm ci && npm test
+frontend-install:
+	cd src/frontend && npm ci
+
+test-frontend: frontend-install
+	cd src/frontend && npm test
+
+lint-frontend: frontend-install
+	cd src/frontend && npm run lint
+
+tsc-check: frontend-install
+	cd src/frontend && npm run tsc-check
 
 install-tools:
 	sudo apt-get install -y shellcheck shfmt python3-pytest nodejs npm
