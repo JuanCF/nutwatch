@@ -6,7 +6,26 @@ on:
       - 'v*.*.*'
 
 jobs:
+  check-tag-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag is on main branch
+        run: |
+          TAG_SHA=$(git rev-parse "${{ github.ref }}")
+          if ! git merge-base --is-ancestor "$TAG_SHA" origin/main 2>/dev/null && \
+             [ "$TAG_SHA" != "$(git rev-parse origin/main)" ]; then
+            echo "ERROR: Tag ${{ github.ref_name }} is not on the main branch."
+            echo "Push tags from commits on the main branch only."
+            exit 1
+          fi
+
   lint-shell:
+    needs: [check-tag-branch]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,6 +44,7 @@ jobs:
         run: find vm/ -name "*.sh" -print0 | xargs -0 shfmt -d -i 2
 
   lint-python:
+    needs: [check-tag-branch]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -49,6 +69,7 @@ jobs:
         run: python3 -m pytest tests/ -v
 
   test-frontend:
+    needs: [check-tag-branch]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -69,7 +90,7 @@ jobs:
         run: cd src/frontend && npm test
 
   release:
-    needs: [lint-shell, lint-python, test-frontend]
+    needs: [check-tag-branch, lint-shell, lint-python, test-frontend]
     runs-on: ubuntu-latest
     permissions:
       contents: write
