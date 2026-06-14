@@ -27,15 +27,15 @@ Also check `scripts/setup.sh` for version strings in the header comment (line ~1
 
 The version bump is typically done in two commits:
 
-1. **Version bump commit** — updates the version number itself (`package.json`, `constants/index.ts`, `setup.sh`).
-2. **NUTWATCH_REF bump commit** — updates all remaining references to the old tag across `vm/nut-vm.sh`, `scripts/setup.sh`, and `README.md`.
+1. **Version bump commit** — updates the version number itself (`package.json`, `constants/index.ts`).
+2. **NUTWATCH_REF bump commit** — updates all references to the old tag across `vm/nut-vm.sh`, `scripts/setup.sh`, and `README.md`.
 
 This pattern ensures the new version is self-referencing before the release tag is created.
 
 ## CI
 
 ```bash
-make check   # full suite: shellcheck + shfmt + Python lint + pytest
+make check   # full suite: shellcheck + shfmt + Python lint + pytest + tsc-check + frontend lint + frontend tests
 ```
 
 See `AGENTS.md` for the full list of developer commands.
