@@ -20,6 +20,19 @@ export default function Logs() {
     pausedRef.current = paused;
   }, [paused]);
 
+  async function loadRecent() {
+    try {
+      const r = await api<{ stdout: string }>(API.LOGS_RECENT);
+      const lines = r.stdout.split('\n').filter(Boolean).map(text => {
+        const cls = classifyLogLine(text);
+        return { text, cls };
+      });
+      setLogLines(lines);
+    } catch (e) {
+      setLogLines([{ text: 'Failed to load recent logs: ' + (e as Error).message, cls: 'log-line error' }]);
+    }
+  }
+
   useEffect(() => {
     void loadRecent();
     if (esRef.current) return;
@@ -52,19 +65,6 @@ export default function Logs() {
       boxRef.current.scrollTop = boxRef.current.scrollHeight;
     }
   }, [logLines, autoScroll]);
-
-  async function loadRecent() {
-    try {
-      const r = await api<{ stdout: string }>(API.LOGS_RECENT);
-      const lines = r.stdout.split('\n').filter(Boolean).map(text => {
-        const cls = classifyLogLine(text);
-        return { text, cls };
-      });
-      setLogLines(lines);
-    } catch (e) {
-      setLogLines([{ text: 'Failed to load recent logs: ' + (e as Error).message, cls: 'log-line error' }]);
-    }
-  }
 
   return (
     <>
