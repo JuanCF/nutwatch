@@ -47,6 +47,7 @@ export const API = {
   WOL_TARGETS: '/wol/targets',
   WOL_MAPPINGS: '/wol/mappings',
   WOL_WAKE_ALL: '/wol/wake-all',
+  WOL_NETWORK_HOSTS: '/wol/network-hosts',
   history: (ups: string, range: string, vars?: string[]) => {
     let p = `/history/${encodeURIComponent(ups)}?range=${encodeURIComponent(range)}`;
     if (vars) p += `&variables=${vars.map(v => encodeURIComponent(v)).join(',')}`;
@@ -91,7 +92,7 @@ export const CONFIG_FILENAMES = ['ups.conf', 'upsd.conf', 'upsmon.conf', 'upsd.u
 
 export const READONLY_CONFIG = 'upsd.users';
 
-export const APP_VERSION = 'v1.1.0';
+export const APP_VERSION = 'v1.1.1';
 
 export const MAX_LOG_LINES = 1000;
 

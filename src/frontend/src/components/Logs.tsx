@@ -21,6 +21,7 @@ export default function Logs() {
   }, [paused]);
 
   useEffect(() => {
+    void loadRecent();
     if (esRef.current) return;
     const box = boxRef.current;
     if (!box) return;
@@ -70,7 +71,6 @@ export default function Logs() {
       <h2>Logs</h2>
       <div className="toolbar">
         <button className="secondary" id="log-pause" onClick={() => setPaused(v => !v)}>{paused ? 'Resume' : 'Pause'}</button>
-        <button className="secondary" onClick={() => void loadRecent()}>Load Recent</button>
         <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
           <input type="checkbox" checked={autoScroll} onChange={e => setAutoScroll(e.target.checked)} /> Auto-scroll
         </label>

@@ -233,3 +233,70 @@ def test_cleanup_for_ups(monkeypatch):
     from services.wol import cleanup_for_ups
     monkeypatch.setattr("services.wol._load_json", lambda p: {"mappings": [{"ups": "gone", "event": "O", "targets": ["b"]}, {"ups": "keep", "event": "O", "targets": ["b"]}]})
     cleanup_for_ups("gone")
+
+
+# ── scan_network_hosts ──────────────────────────────────────────────────
+
+def test_scan_network_hosts_parses_arp(monkeypatch):
+    import subprocess, socket, types
+    arp_output = (
+        "192.168.1.1 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE\n"
+        "192.168.1.100 dev eth0 lladdr 11:22:33:44:55:66 STALE\n"
+        "192.168.1.200 dev eth0 FAILED\n"
+    )
+    fake = types.SimpleNamespace(stdout=arp_output, returncode=0)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: fake)
+    monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: (f"host-{ip.replace('.', '-')}", [], [ip]))
+    from services.wol import scan_network_hosts
+    hosts = scan_network_hosts()
+    assert len(hosts) == 2
+    macs = {h["mac"] for h in hosts}
+    assert "AA:BB:CC:DD:EE:FF" in macs
+    assert "11:22:33:44:55:66".upper() in macs
+    for h in hosts:
+        assert h["hostname"].startswith("host-")
+
+
+def test_scan_network_hosts_excludes_failed_entries(monkeypatch):
+    import subprocess, socket, types
+    arp_output = (
+        "10.0.0.1 dev eth0 FAILED\n"
+        "10.0.0.2 dev eth0 INCOMPLETE\n"
+        "10.0.0.3 dev eth0 lladdr de:ad:be:ef:00:01 REACHABLE\n"
+    )
+    fake = types.SimpleNamespace(stdout=arp_output, returncode=0)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: fake)
+    monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: ("host", [], [ip]))
+    from services.wol import scan_network_hosts
+    hosts = scan_network_hosts()
+    assert len(hosts) == 1
+    assert hosts[0]["mac"] == "DE:AD:BE:EF:00:01"
+
+
+def test_scan_network_hosts_empty_arp(monkeypatch):
+    import subprocess, types
+    fake = types.SimpleNamespace(stdout="", returncode=0)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: fake)
+    from services.wol import scan_network_hosts
+    assert scan_network_hosts() == []
+
+
+def test_scan_network_hosts_subprocess_error(monkeypatch):
+    import subprocess
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(subprocess.SubprocessError("fail")))
+    from services.wol import scan_network_hosts
+    assert scan_network_hosts() == []
+
+
+def test_scan_network_hosts_hostname_failure(monkeypatch):
+    import subprocess, socket, types
+    arp_output = "192.168.1.1 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE\n"
+    fake = types.SimpleNamespace(stdout=arp_output, returncode=0)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: fake)
+    monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: (_ for _ in ()).throw(OSError("no reverse DNS")))
+    from services.wol import scan_network_hosts
+    hosts = scan_network_hosts()
+    assert len(hosts) == 1
+    assert hosts[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert hosts[0]["hostname"] == ""
+    assert hosts[0]["ip"] == "192.168.1.1"
