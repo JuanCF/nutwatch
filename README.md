@@ -64,6 +64,26 @@ This repository also includes `vm/nut-vm.sh`, a bash script to automatically cre
 
 ---
 
+## Screenshots
+
+| Dashboard | UPS Devices | UPS Detail (Info) |
+|:---:|:---:|:---:|
+| [![Dashboard](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png) | [![UPS Devices](docs/screenshots/ups-devices.png)](docs/screenshots/ups-devices.png) | [![UPS Detail](docs/screenshots/ups-detail.png)](docs/screenshots/ups-detail.png) |
+
+| UPS Charts (Input Voltage) | UPS Charts (Runtime) | Hooks |
+|:---:|:---:|:---:|
+| [![Input Voltage](docs/screenshots/ups-charts-voltage.png)](docs/screenshots/ups-charts-voltage.png) | [![Runtime](docs/screenshots/ups-charts-runtime.png)](docs/screenshots/ups-charts-runtime.png) | [![Hooks](docs/screenshots/hooks.png)](docs/screenshots/hooks.png) |
+
+| Users | Notifications | Logs |
+|:---:|:---:|:---:|
+| [![Users](docs/screenshots/users.png)](docs/screenshots/users.png) | [![Notifications](docs/screenshots/notifications.png)](docs/screenshots/notifications.png) | [![Logs](docs/screenshots/logs.png)](docs/screenshots/logs.png) |
+
+| Config Files | Wake on LAN | Edit UPS |
+|:---:|:---:|:---:|
+| [![Config Files](docs/screenshots/config-files.png)](docs/screenshots/config-files.png) | [![Wake on LAN](docs/screenshots/wake-on-lan.png)](docs/screenshots/wake-on-lan.png) | [![Edit UPS](docs/screenshots/edit-ups.png)](docs/screenshots/edit-ups.png) |
+
+---
+
 ## Supported UPS Vendors
 
 | Vendor | USB ID | Driver |
