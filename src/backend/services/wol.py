@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import logging
 import os
@@ -15,6 +16,14 @@ WOL_JSON = os.path.join(NUT_DIR, "wol.json")
 WOL_EVENTS_JSON = os.path.join(NUT_DIR, "wol-events.json")
 
 MAC_REGEX = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")
+
+_ARPING_MAC_RE = re.compile(
+    r'(?:'
+    r'\d+ bytes from ([0-9a-fA-F:]{17}) \((\d+\.\d+\.\d+\.\d+)\)'  # Thomas Habets arping
+    r'|'
+    r'Unicast reply from (\d+\.\d+\.\d+\.\d+) \[([0-9a-fA-F:]{17})\]'  # iputils arping
+    r')'
+)
 
 
 def _load_json(path: str) -> dict:
@@ -183,22 +192,142 @@ def _resolve_hostname(ip: str) -> str:
         return ''
 
 
-def scan_network_hosts() -> list:
-    """Return hosts from the ARP cache with their MAC addresses and hostnames."""
-    hosts = []
+def _get_local_subnet() -> str | None:
+    """Return the first active link-scoped subnet (/24 or smaller) from the routing table."""
+    try:
+        rc, stdout, _ = run_cmd(["ip", "route", "show"], timeout=5)
+        if rc != 0:
+            return None
+        for line in stdout.splitlines():
+            if 'linkdown' in line:
+                continue
+            parts = line.split()
+            if not (parts and '/' in parts[0] and 'scope link' in line):
+                continue
+            try:
+                net = ipaddress.ip_network(parts[0], strict=False)
+                if net.num_addresses <= 256:  # /24 or smaller; skip Docker /16s etc.
+                    return parts[0]
+            except ValueError:
+                continue
+    except Exception:
+        pass
+    return None
+
+
+def _generate_ips(subnet: str) -> list[str]:
+    """Return all host addresses for a subnet (excludes network and broadcast)."""
+    try:
+        return [str(ip) for ip in ipaddress.ip_network(subnet, strict=False).hosts()]
+    except ValueError:
+        return []
+
+
+def _probe_arping(ip: str) -> dict | None:
+    """
+    ARP-probe one IP via arping. Returns {ip, mac, hostname} or None on timeout/no-reply.
+    Raises PermissionError if arping needs cap_net_raw or is not installed.
+    """
+    rc, stdout, stderr = run_cmd(["arping", "-c", "1", "-w", "1", ip], timeout=3)
+    # run_cmd never raises: it returns (-1, "", str(exc)) when arping can't be
+    # executed. Detect both "needs root" and "not installed" from the message.
+    low = stderr.lower()
+    if "not permitted" in low or "no such file" in low or "not found" in low:
+        raise PermissionError(stderr.strip())
+    m = _ARPING_MAC_RE.search(stdout)
+    if m:
+        mac = m.group(1) or m.group(4)
+        return {"ip": ip, "mac": mac.upper(), "hostname": ""}
+    return None
+
+
+def _scan_with_arping(ips: list[str]) -> list[dict] | None:
+    """
+    Probe all IPs via arping in parallel.
+    Returns host list on success, or None if arping is unavailable or requires root.
+    """
+    hosts: list[dict] = []
+    _denied = [False]
+
+    def probe(ip: str) -> dict | None:
+        try:
+            return _probe_arping(ip)
+        except PermissionError:
+            _denied[0] = True
+            return None
+
+    workers = min(len(ips), 100)
+    overall_timeout = max(len(ips) / workers * 3 + 5, 10)
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {ex.submit(probe, ip): ip for ip in ips}
+        try:
+            for fut in as_completed(futures, timeout=overall_timeout):
+                result = fut.result()
+                if result:
+                    hosts.append(result)
+        except FutureTimeoutError:
+            for fut in futures:
+                if not fut.done():
+                    fut.cancel()
+
+    if _denied[0]:
+        return None
+    return hosts
+
+
+def _scan_with_ping_sweep(ips: list[str]) -> list[dict]:
+    """Trigger ARP for all IPs via ping or UDP sendto, then read the cache."""
+    def trigger(ip: str) -> None:
+        _, _, stderr = run_cmd(["ping", "-c", "1", "-W", "1", ip], timeout=2)
+        # run_cmd never raises; a missing ping binary surfaces as an error
+        # string. If ping actually ran (host up or down), the ARP request was
+        # already sent and we're done.
+        low = stderr.lower()
+        if "no such file" not in low and "not found" not in low:
+            return
+        # ping not available: a non-blocking UDP sendto forces the kernel to
+        # send an ARP request before queuing the packet, populating the cache.
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.setblocking(False)
+                s.sendto(b'\x00', (ip, 9))
+        except OSError:
+            pass
+
+    workers = min(len(ips), 100)
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = list(ex.submit(trigger, ip) for ip in ips)
+        try:
+            for fut in as_completed(futures, timeout=max(len(ips) / workers * 2 + 5, 8)):
+                try:
+                    fut.result()
+                except Exception:
+                    pass
+        except FutureTimeoutError:
+            pass
+
+    return _scan_passive_arp()
+
+
+def _scan_passive_arp() -> list[dict]:
+    """Read the kernel ARP cache via 'ip neigh show'."""
     try:
         rc, stdout, _ = run_cmd(["ip", "neigh", "show"], timeout=5)
         if rc != 0:
             return []
         ip_mac_re = re.compile(r'^(\d+\.\d+\.\d+\.\d+)\s.*lladdr\s+([0-9a-fA-F:]{17})', re.MULTILINE)
-        for m in ip_mac_re.finditer(stdout):
-            hosts.append({'ip': m.group(1), 'mac': m.group(2).upper(), 'hostname': ''})
+        return [
+            {"ip": m.group(1), "mac": m.group(2).upper(), "hostname": ""}
+            for m in ip_mac_re.finditer(stdout)
+        ]
     except Exception:
         return []
 
-    if not hosts:
-        return []
 
+def _add_hostnames(hosts: list[dict]) -> list[dict]:
+    """Resolve reverse-DNS hostnames in parallel; fills 'hostname' in-place."""
+    if not hosts:
+        return hosts
     with ThreadPoolExecutor(max_workers=min(len(hosts), 10)) as ex:
         futures = {ex.submit(_resolve_hostname, h['ip']): h for h in hosts}
         try:
@@ -212,8 +341,22 @@ def scan_network_hosts() -> list:
             for fut in futures:
                 if not fut.done():
                     fut.cancel()
-
     return hosts
+
+
+def scan_network_hosts() -> list:
+    """Discover LAN hosts with MACs: tries arping, falls back to ping sweep, then passive ARP."""
+    subnet = _get_local_subnet()
+    if subnet:
+        ips = _generate_ips(subnet)
+        if ips:
+            hosts = _scan_with_arping(ips)
+            if hosts:
+                return _add_hostnames(hosts)
+            hosts = _scan_with_ping_sweep(ips)
+            return _add_hostnames(hosts)
+
+    return _add_hostnames(_scan_passive_arp())
 
 
 def cleanup_for_ups(upsname: str) -> None:

@@ -235,10 +235,206 @@ def test_cleanup_for_ups(monkeypatch):
     cleanup_for_ups("gone")
 
 
-# ── scan_network_hosts ──────────────────────────────────────────────────
+# ── scan helper unit tests ─────────────────────────────────────────────────
 
-def test_scan_network_hosts_parses_arp(monkeypatch):
+def test_get_local_subnet_returns_cidr(monkeypatch):
+    route_output = (
+        "default via 192.168.1.1 dev eth0 proto dhcp\n"
+        "192.168.1.0/24 dev eth0 proto kernel scope link src 192.168.1.100\n"
+    )
+    monkeypatch.setattr("services.wol.run_cmd", lambda cmd, timeout: (0, route_output, ""))
+    from services.wol import _get_local_subnet
+    assert _get_local_subnet() == "192.168.1.0/24"
+
+
+def test_get_local_subnet_skips_linkdown(monkeypatch):
+    """Docker bridge routes (linkdown) are ignored; real LAN route is returned."""
+    route_output = (
+        "default via 192.168.68.4 dev enp0s5 proto dhcp\n"
+        "172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1 linkdown\n"
+        "172.18.0.0/16 dev br-abc proto kernel scope link src 172.18.0.1 linkdown\n"
+        "192.168.68.0/24 dev enp0s5 proto kernel scope link src 192.168.68.116\n"
+    )
+    monkeypatch.setattr("services.wol.run_cmd", lambda cmd, timeout: (0, route_output, ""))
+    from services.wol import _get_local_subnet
+    assert _get_local_subnet() == "192.168.68.0/24"
+
+
+def test_get_local_subnet_skips_large_subnets(monkeypatch):
+    """/16 subnets (even if up) are skipped to avoid scanning 65k hosts."""
+    route_output = "10.0.0.0/16 dev eth0 proto kernel scope link src 10.0.1.100\n"
+    monkeypatch.setattr("services.wol.run_cmd", lambda cmd, timeout: (0, route_output, ""))
+    from services.wol import _get_local_subnet
+    assert _get_local_subnet() is None
+
+
+def test_get_local_subnet_no_link_route(monkeypatch):
+    monkeypatch.setattr("services.wol.run_cmd", lambda cmd, timeout: (0, "default via 192.168.1.1 dev eth0\n", ""))
+    from services.wol import _get_local_subnet
+    assert _get_local_subnet() is None
+
+
+def test_get_local_subnet_command_fails(monkeypatch):
+    monkeypatch.setattr("services.wol.run_cmd", lambda cmd, timeout: (1, "", "error"))
+    from services.wol import _get_local_subnet
+    assert _get_local_subnet() is None
+
+
+def test_generate_ips_slash30():
+    from services.wol import _generate_ips
+    assert _generate_ips("192.168.1.0/30") == ["192.168.1.1", "192.168.1.2"]
+
+
+def test_generate_ips_invalid():
+    from services.wol import _generate_ips
+    assert _generate_ips("not-valid") == []
+
+
+# ── scan_network_hosts integration tests ──────────────────────────────────
+
+def test_scan_arping_thomas_habets_format(monkeypatch):
+    """arping (Thomas Habets) output is parsed to extract MAC."""
     import socket
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: "192.168.1.0/30")
+    monkeypatch.setattr("services.wol._generate_ips", lambda s: ["192.168.1.1", "192.168.1.2"])
+
+    def fake_run(cmd, timeout):
+        if cmd[0] == "arping" and cmd[-1] == "192.168.1.1":
+            return (0, "60 bytes from aa:bb:cc:dd:ee:ff (192.168.1.1): index=0 time=1ms", "")
+        return (1, "", "")
+
+    monkeypatch.setattr("services.wol.run_cmd", fake_run)
+    monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: ("router.local", [], [ip]))
+    from services.wol import scan_network_hosts
+    hosts = scan_network_hosts()
+    assert len(hosts) == 1
+    assert hosts[0] == {"ip": "192.168.1.1", "mac": "AA:BB:CC:DD:EE:FF", "hostname": "router.local"}
+
+
+def test_scan_arping_iputils_format(monkeypatch):
+    """arping (iputils) 'Unicast reply from' output is parsed correctly."""
+    import socket
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: "192.168.1.0/30")
+    monkeypatch.setattr("services.wol._generate_ips", lambda s: ["192.168.1.1"])
+
+    iputils_out = (
+        "ARPING 192.168.1.1 from 192.168.1.100 eth0\n"
+        "Unicast reply from 192.168.1.1 [AA:BB:CC:DD:EE:FF]  1.234ms\n"
+        "Sent 1 probes (1 broadcast(s))\nReceived 1 response(s)\n"
+    )
+    monkeypatch.setattr("services.wol.run_cmd", lambda cmd, timeout: (0, iputils_out, ""))
+    monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: ("host", [], [ip]))
+    from services.wol import scan_network_hosts
+    hosts = scan_network_hosts()
+    assert len(hosts) == 1
+    assert hosts[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+
+
+def test_scan_arping_empty_result_falls_back_to_ping(monkeypatch):
+    """arping runs but finds no hosts (wrong iface, bad env) → ping sweep + ARP cache fallback."""
+    import socket
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: "192.168.1.0/30")
+    monkeypatch.setattr("services.wol._generate_ips", lambda s: ["192.168.1.1"])
+
+    arp_output = "192.168.1.1 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE\n"
+
+    def fake_run(cmd, timeout):
+        if cmd[0] == "arping":
+            return (1, "", "")  # exits non-zero, no MAC in output, no "not permitted"
+        if cmd[0] == "ping":
+            return (0, "", "")
+        return (0, arp_output, "")
+
+    monkeypatch.setattr("services.wol.run_cmd", fake_run)
+    monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: ("", [], [ip]))
+    from services.wol import scan_network_hosts
+    hosts = scan_network_hosts()
+    assert len(hosts) == 1
+    assert hosts[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+
+
+def test_scan_arping_permission_error_falls_back_to_ping(monkeypatch):
+    """'Operation not permitted' from arping triggers ping sweep + ARP cache fallback."""
+    import socket
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: "192.168.1.0/30")
+    monkeypatch.setattr("services.wol._generate_ips", lambda s: ["192.168.1.1"])
+
+    arp_output = "192.168.1.1 dev eth0 lladdr bb:cc:dd:ee:ff:aa REACHABLE\n"
+
+    def fake_run(cmd, timeout):
+        if cmd[0] == "arping":
+            return (1, "", "arping: Operation not permitted")
+        if cmd[0] == "ping":
+            return (0, "", "")
+        return (0, arp_output, "")
+
+    monkeypatch.setattr("services.wol.run_cmd", fake_run)
+    monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: ("", [], [ip]))
+    from services.wol import scan_network_hosts
+    hosts = scan_network_hosts()
+    assert len(hosts) == 1
+    assert hosts[0]["mac"] == "BB:CC:DD:EE:FF:AA"
+
+
+def test_scan_arping_not_installed_falls_back_to_ping(monkeypatch):
+    """arping not installed (run_cmd returns -1 + 'No such file') triggers ping sweep fallback."""
+    import socket
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: "192.168.1.0/30")
+    monkeypatch.setattr("services.wol._generate_ips", lambda s: ["192.168.1.1"])
+
+    arp_output = "192.168.1.1 dev eth0 lladdr cc:dd:ee:ff:aa:bb REACHABLE\n"
+
+    def fake_run(cmd, timeout):
+        if cmd[0] == "arping":
+            return (-1, "", "[Errno 2] No such file or directory: 'arping'")
+        if cmd[0] == "ping":
+            return (0, "", "")
+        return (0, arp_output, "")
+
+    monkeypatch.setattr("services.wol.run_cmd", fake_run)
+    monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: ("", [], [ip]))
+    from services.wol import scan_network_hosts
+    hosts = scan_network_hosts()
+    assert len(hosts) == 1
+    assert hosts[0]["mac"] == "CC:DD:EE:FF:AA:BB"
+
+
+def test_scan_ping_not_installed_uses_udp_fallback(monkeypatch):
+    """When neither arping nor ping is installed, UDP sendto triggers ARP; cache is then read."""
+    import socket
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: "192.168.1.0/30")
+    monkeypatch.setattr("services.wol._generate_ips", lambda s: ["192.168.1.1"])
+
+    arp_output = "192.168.1.1 dev eth0 lladdr dd:ee:ff:aa:bb:cc REACHABLE\n"
+
+    def fake_run(cmd, timeout):
+        if cmd[0] in ("arping", "ping"):
+            return (-1, "", f"[Errno 2] No such file or directory: '{cmd[0]}'")
+        return (0, arp_output, "")
+
+    udp_targets = []
+
+    class FakeSocket:
+        def __init__(self, *a, **kw): pass
+        def setblocking(self, v): pass
+        def sendto(self, data, addr): udp_targets.append(addr[0])
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+
+    monkeypatch.setattr("services.wol.run_cmd", fake_run)
+    monkeypatch.setattr("services.wol.socket.socket", FakeSocket)
+    monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: ("", [], [ip]))
+    from services.wol import scan_network_hosts
+    hosts = scan_network_hosts()
+    assert "192.168.1.1" in udp_targets
+    assert len(hosts) == 1
+    assert hosts[0]["mac"] == "DD:EE:FF:AA:BB:CC"
+
+
+def test_scan_falls_back_to_passive_arp_without_subnet(monkeypatch):
+    """No subnet detected → passive ip neigh show is used."""
+    import socket
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: None)
     arp_output = (
         "192.168.1.1 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE\n"
         "192.168.1.100 dev eth0 lladdr 11:22:33:44:55:66 STALE\n"
@@ -256,8 +452,10 @@ def test_scan_network_hosts_parses_arp(monkeypatch):
         assert h["hostname"].startswith("host-")
 
 
-def test_scan_network_hosts_excludes_failed_entries(monkeypatch):
+def test_scan_passive_excludes_incomplete_entries(monkeypatch):
+    """Passive ARP only returns entries with lladdr (skips FAILED/INCOMPLETE)."""
     import socket
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: None)
     arp_output = (
         "10.0.0.1 dev eth0 FAILED\n"
         "10.0.0.2 dev eth0 INCOMPLETE\n"
@@ -271,20 +469,23 @@ def test_scan_network_hosts_excludes_failed_entries(monkeypatch):
     assert hosts[0]["mac"] == "DE:AD:BE:EF:00:01"
 
 
-def test_scan_network_hosts_empty_arp(monkeypatch):
+def test_scan_empty_arp_cache(monkeypatch):
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: None)
     monkeypatch.setattr("services.wol.run_cmd", lambda cmd, timeout: (0, "", ""))
     from services.wol import scan_network_hosts
     assert scan_network_hosts() == []
 
 
-def test_scan_network_hosts_subprocess_error(monkeypatch):
+def test_scan_handles_run_cmd_exception(monkeypatch):
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: None)
     monkeypatch.setattr("services.wol.run_cmd", lambda cmd, timeout: (_ for _ in ()).throw(RuntimeError("fail")))
     from services.wol import scan_network_hosts
     assert scan_network_hosts() == []
 
 
-def test_scan_network_hosts_hostname_failure(monkeypatch):
+def test_scan_hostname_resolution_failure(monkeypatch):
     import socket
+    monkeypatch.setattr("services.wol._get_local_subnet", lambda: None)
     arp_output = "192.168.1.1 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE\n"
     monkeypatch.setattr("services.wol.run_cmd", lambda cmd, timeout: (0, arp_output, ""))
     monkeypatch.setattr(socket, "gethostbyaddr", lambda ip: (_ for _ in ()).throw(OSError("no reverse DNS")))
