@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 
 from auth import require_admin
 from config import IDENTIFIER_REGEX
+from services.system import restart_server
 from services.users import list_users, add_user, edit_user, delete_user
 
 users_bp = Blueprint("users", __name__)
@@ -28,6 +29,9 @@ def add_user_handler():
     new_entry, err = add_user(data)
     if err:
         return jsonify({"error": err}), 409
+    rc, _, _ = restart_server()
+    if rc != 0:
+        return jsonify({"error": "Failed to restart nut-server"}), 500
     return jsonify(new_entry), 201
 
 
@@ -43,6 +47,9 @@ def edit_user_handler(name):
     e = edit_user(name, data)
     if e is None:
         return jsonify({"error": "not found"}), 404
+    rc, _, _ = restart_server()
+    if rc != 0:
+        return jsonify({"error": "Failed to restart nut-server"}), 500
     return jsonify(e)
 
 
@@ -53,4 +60,7 @@ def delete_user_handler(name):
         return jsonify({"error": "name contains invalid characters"}), 400
     if not delete_user(name):
         return jsonify({"error": "not found"}), 404
+    rc, _, _ = restart_server()
+    if rc != 0:
+        return jsonify({"error": "Failed to restart nut-server"}), 500
     return jsonify({"ok": True})

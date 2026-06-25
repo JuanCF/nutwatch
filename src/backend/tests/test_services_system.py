@@ -22,6 +22,15 @@ def test_restart_monitor(monkeypatch):
     assert rc == 0
 
 
+def test_restart_driver(monkeypatch):
+    calls = []
+    monkeypatch.setattr("services.system.run_cmd", lambda cmd, **kw: (calls.append(cmd), _fake_rc(0))[1])
+    from services.system import restart_driver
+    rc, _, _ = restart_driver()
+    assert rc == 0
+    assert any("nut-driver" in c for c in calls)
+
+
 def test_restart_all(monkeypatch):
     calls = []
     def fake_run(cmd, **kw):

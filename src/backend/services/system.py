@@ -13,6 +13,10 @@ def restart_monitor():
     return run_cmd(["systemctl", "restart", "nut-monitor"])
 
 
+def restart_driver():
+    return run_cmd(["systemctl", "restart", "nut-driver"])
+
+
 def restart_all():
     rc1, out1, err1 = run_cmd(["systemctl", "restart", "nut-server"])
     rc2, out2, err2 = run_cmd(["systemctl", "restart", "nut-monitor"])
