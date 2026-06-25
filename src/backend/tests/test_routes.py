@@ -133,6 +133,7 @@ def test_get_config_route_not_found(monkeypatch):
 
 def test_put_config_route(monkeypatch):
     monkeypatch.setattr("routes.system.put_config", lambda f, c: True)
+    monkeypatch.setattr("routes.system.restart_monitor", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.put("/api/config/upsmon.conf", data="content")
@@ -220,6 +221,8 @@ def test_list_ups_route(monkeypatch):
 
 def test_add_ups_route(monkeypatch):
     monkeypatch.setattr("routes.ups.add_ups", lambda d: ({"name": "newups"}, None))
+    monkeypatch.setattr("routes.ups.restart_driver", lambda: (0, "", ""))
+    monkeypatch.setattr("routes.ups.restart_server", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.post("/api/ups", json={"name": "newups", "driver": "usbhid-ups"})
@@ -282,6 +285,8 @@ def test_get_ups_detail_route_fail(monkeypatch):
 
 def test_edit_ups_route(monkeypatch):
     monkeypatch.setattr("routes.ups.edit_ups", lambda n, d: {"name": "myups", "desc": "Updated"})
+    monkeypatch.setattr("routes.ups.restart_driver", lambda: (0, "", ""))
+    monkeypatch.setattr("routes.ups.restart_server", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.put("/api/ups/myups", json={"desc": "Updated"})
@@ -305,6 +310,9 @@ def test_edit_ups_route_invalid_directives():
 
 def test_delete_ups_route(monkeypatch):
     monkeypatch.setattr("routes.ups.delete_ups", lambda n: True)
+    monkeypatch.setattr("routes.ups.restart_driver", lambda: (0, "", ""))
+    monkeypatch.setattr("routes.ups.restart_server", lambda: (0, "", ""))
+    monkeypatch.setattr("routes.ups.restart_monitor", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.delete("/api/ups/myups")
@@ -339,6 +347,7 @@ def test_get_upsmon_config_route(monkeypatch):
 
 def test_put_upsmon_config_route(monkeypatch):
     monkeypatch.setattr("routes.upsmon.put_upsmon_config", lambda d: None)
+    monkeypatch.setattr("routes.upsmon.restart_monitor", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.put("/api/upsmon/config", json={"monitors": [], "minsupplies": 0})
@@ -365,6 +374,7 @@ def test_list_users_route(monkeypatch):
 
 def test_add_user_route(monkeypatch):
     monkeypatch.setattr("routes.users.add_user", lambda d: ({"name": "newuser"}, None))
+    monkeypatch.setattr("routes.users.restart_server", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.post("/api/users", json={"name": "newuser", "password": "secret"})
@@ -388,6 +398,7 @@ def test_add_user_route_conflict(monkeypatch):
 
 def test_edit_user_route(monkeypatch):
     monkeypatch.setattr("routes.users.edit_user", lambda n, d: {"name": "monuser", "upsmon": "slave"})
+    monkeypatch.setattr("routes.users.restart_server", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.put("/api/users/monuser", json={"upsmon": "slave"})
@@ -404,6 +415,7 @@ def test_edit_user_route_not_found(monkeypatch):
 
 def test_delete_user_route(monkeypatch):
     monkeypatch.setattr("routes.users.delete_user", lambda n: True)
+    monkeypatch.setattr("routes.users.restart_server", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.delete("/api/users/monuser")
