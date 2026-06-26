@@ -3,13 +3,14 @@ import { api } from '../api';
 import { API } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
+import { tryAlert } from '../utils/alerts';
 import UserModal from './UserModal';
 import type { NutUser } from '../types';
 
 export default function Users() {
   const [userList, setUserList] = useState<NutUser[]>([]);
   const { dangerConfirm, alert } = useConfirm();
-  const { openModal, closeModal } = useModal();
+  const { openModal, closeThen } = useModal();
   const deletePending = useRef<Record<string, boolean>>({});
 
   const loadUsers = useCallback(async () => {
@@ -23,24 +24,24 @@ export default function Users() {
   useEffect(() => { void loadUsers(); }, [loadUsers]);
 
   function handleEdit(user: NutUser) {
-    openModal(<UserModal mode="edit" user={user} onSaved={() => { closeModal(); void loadUsers(); }} />);
+    openModal(<UserModal mode="edit" user={user} onSaved={closeThen(loadUsers)} />);
   }
 
   function handleAdd() {
-    openModal(<UserModal mode="add" onSaved={() => { closeModal(); void loadUsers(); }} />);
+    openModal(<UserModal mode="add" onSaved={closeThen(loadUsers)} />);
   }
 
   async function handleDelete(name: string) {
     const key = 'user:' + name;
     if (deletePending.current[key]) return;
+    const ok = await dangerConfirm('Delete user "' + name + '"?');
+    if (!ok) return;
     deletePending.current[key] = true;
     try {
-      const ok = await dangerConfirm('Delete user "' + name + '"?');
-      if (!ok) return;
-      await api(API.user(name), { method: 'DELETE' });
-      void loadUsers();
-    } catch (e) {
-      await alert('Failed to delete user:\n' + (e as Error).message, 'Error');
+      await tryAlert(alert, async () => {
+        await api(API.user(name), { method: 'DELETE' });
+        void loadUsers();
+      }, 'User deleted.', 'delete user');
     } finally {
       delete deletePending.current[key];
     }

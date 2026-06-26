@@ -133,7 +133,6 @@ def test_get_config_route_not_found(monkeypatch):
 
 def test_put_config_route(monkeypatch):
     monkeypatch.setattr("routes.system.put_config", lambda f, c: True)
-    monkeypatch.setattr("routes.system.restart_monitor", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.put("/api/config/upsmon.conf", data="content")
@@ -347,7 +346,6 @@ def test_get_upsmon_config_route(monkeypatch):
 
 def test_put_upsmon_config_route(monkeypatch):
     monkeypatch.setattr("routes.upsmon.put_upsmon_config", lambda d: None)
-    monkeypatch.setattr("routes.upsmon.restart_monitor", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.put("/api/upsmon/config", json={"monitors": [], "minsupplies": 0})

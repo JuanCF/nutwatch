@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify
 
 from auth import require_admin
-from services.system import restart_monitor
 from services.upsmon import get_upsmon_config, put_upsmon_config
 
 upsmon_bp = Blueprint("upsmon", __name__)
@@ -23,5 +22,4 @@ def put_upsmon_config_handler():
         put_upsmon_config(data)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    restart_monitor()
     return jsonify({"ok": True})

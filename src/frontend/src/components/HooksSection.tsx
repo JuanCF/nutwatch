@@ -4,6 +4,7 @@ import { api } from '../api';
 import { API, NOTIFICATION_EVENTS } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
+import { tryAlert } from '../utils/alerts';
 import HookEditor from './HookEditor';
 
 export default function HooksSection() {
@@ -12,7 +13,7 @@ export default function HooksSection() {
   const upsname = decodeURIComponent(name ?? '');
   const [hookEvents, setHookEvents] = useState<string[]>([]);
   const { dangerConfirm, alert } = useConfirm();
-  const { openModal, closeModal } = useModal();
+  const { openModal, closeThen } = useModal();
 
   const loadHooks = useCallback(async () => {
     try {
@@ -26,18 +27,16 @@ export default function HooksSection() {
   useEffect(() => { void loadHooks(); }, [loadHooks]);
 
   function openEditor(event: string) {
-    openModal(<HookEditor upsname={upsname} event={event} onClose={() => { closeModal(); void loadHooks(); }} />);
+    openModal(<HookEditor upsname={upsname} event={event} onClose={closeThen(loadHooks)} />);
   }
 
   async function deleteHook(event: string) {
     const ok = await dangerConfirm('Delete hook for ' + upsname + ' on ' + event + '?');
     if (!ok) return;
-    try {
+    await tryAlert(alert, async () => {
       await api(API.hooks(upsname, event), { method: 'DELETE' });
       void loadHooks();
-    } catch (e) {
-      await alert('Failed to delete hook:\n' + (e as Error).message, 'Error');
-    }
+    }, 'Hook deleted.', 'delete hook');
   }
 
   return (

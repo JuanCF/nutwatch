@@ -3,6 +3,7 @@ import { api } from '../api';
 import { API } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
+import { tryAlert } from '../utils/alerts';
 
 interface HookEditorProps {
   upsname: string;
@@ -30,14 +31,14 @@ export default function HookEditor({ upsname, event, onClose }: HookEditorProps)
     if (savePending.current) return;
     savePending.current = true;
     try {
-      await api(API.hooks(upsname, event), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      });
-      onClose();
-    } catch (e) {
-      await alert('Failed to save hook:\n' + (e as Error).message, 'Error');
+      await tryAlert(alert, async () => {
+        await api(API.hooks(upsname, event), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        });
+        onClose();
+      }, 'Hook saved.', 'save hook');
     } finally {
       savePending.current = false;
     }
@@ -46,12 +47,10 @@ export default function HookEditor({ upsname, event, onClose }: HookEditorProps)
   async function handleDelete() {
     const ok = await dangerConfirm('Delete hook for ' + upsname + ' on ' + event + '?');
     if (!ok) return;
-    try {
+    await tryAlert(alert, async () => {
       await api(API.hooks(upsname, event), { method: 'DELETE' });
       onClose();
-    } catch (e) {
-      await alert('Failed to delete hook:\n' + (e as Error).message, 'Error');
-    }
+    }, 'Hook deleted.', 'delete hook');
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {

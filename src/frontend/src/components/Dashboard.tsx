@@ -5,6 +5,7 @@ import { statusToBadgeClass } from '../utils/service';
 import { getBatteryChargeColor, getLoadColor } from '../utils/metrics';
 import Badge from './Badge';
 import Gauge from './Gauge';
+import Skeleton from './Skeleton';
 import type { UpsDevice, UpsDetailData, ServicesMap } from '../types';
 
 type DetailMap = { [name: string]: UpsDetailData | undefined };
@@ -15,22 +16,22 @@ function SkeletonDashboard() {
       <div className="stat-grid">
         {[1, 2, 3, 4].map(i => (
           <div key={i} className="stat-card">
-            <div className="skeleton skeleton-stat-card" />
+            <Skeleton className="skeleton-stat-card" />
           </div>
         ))}
       </div>
       <div className="dashboard-row">
         <div className="dashboard-card">
-          <div className="skeleton skeleton-title" />
-          <div className="skeleton skeleton-row" />
-          <div className="skeleton skeleton-row" />
-          <div className="skeleton skeleton-row" />
+          <Skeleton className="skeleton-title" />
+          <Skeleton className="skeleton-row" />
+          <Skeleton className="skeleton-row" />
+          <Skeleton className="skeleton-row" />
         </div>
         <div className="dashboard-card">
-          <div className="skeleton skeleton-title" />
-          <div className="skeleton skeleton-row" />
-          <div className="skeleton skeleton-row" />
-          <div className="skeleton skeleton-row" />
+          <Skeleton className="skeleton-title" />
+          <Skeleton className="skeleton-row" />
+          <Skeleton className="skeleton-row" />
+          <Skeleton className="skeleton-row" />
         </div>
       </div>
     </>

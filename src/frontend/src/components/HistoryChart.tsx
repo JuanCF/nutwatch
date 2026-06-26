@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { api } from '../api';
 import { API } from '../constants';
+import Skeleton from './Skeleton';
 
 interface HistoryChartProps {
   upsName: string;
@@ -274,8 +275,8 @@ function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[]
 function SkeletonChart() {
   return (
     <div className="chart-skeleton">
-      <div className="skeleton skeleton-chart-area" />
-      <div className="skeleton skeleton-chart-area" style={{ width: '60%', marginTop: '0.5rem' }} />
+      <Skeleton className="skeleton-chart-area" />
+      <Skeleton className="skeleton-chart-area" width="60%" style={{ marginTop: '0.5rem' }} />
     </div>
   );
 }

@@ -14,7 +14,7 @@ export default function UpsDevices() {
   const [upsList, setUpsList] = useState<UpsDevice[]>([]);
   const [details, setDetails] = useState<DetailMap>({});
   const { confirm, dangerConfirm, alert } = useConfirm();
-  const { openModal, closeModal } = useModal();
+  const { openModal, closeModal, closeThen } = useModal();
   const deletePending = useRef<Record<string, boolean>>({});
   const driverPending = useRef<Record<string, boolean>>({});
 
@@ -90,11 +90,11 @@ export default function UpsDevices() {
   }
 
   function handleEdit(ups: UpsDevice) {
-    openModal(<UpsModal mode="edit" ups={ups} onSaved={() => { closeModal(); void loadUps(); }} />);
+    openModal(<UpsModal mode="edit" ups={ups} onSaved={closeThen(loadUps)} />);
   }
 
   function handleAdd() {
-    openModal(<UpsModal mode="add" onSaved={() => { closeModal(); void loadUps(); }} />);
+    openModal(<UpsModal mode="add" onSaved={closeThen(loadUps)} />);
   }
 
   async function handleScan() {
@@ -138,7 +138,7 @@ export default function UpsDevices() {
                 {d.productid && <div className="meta">productid: {d.productid}</div>}
                 {extras.map(([k, v], j) => <div key={j} className="meta">{k}: {v}</div>)}
                 <div className="actions">
-                  <button className="primary" onClick={() => openModal(<UpsModal mode="add" scanData={d} onSaved={() => { closeModal(); void loadUps(); }} />)}>Add to NUT</button>
+                  <button className="primary" onClick={() => openModal(<UpsModal mode="add" scanData={d} onSaved={closeThen(loadUps)} />)}>Add to NUT</button>
                 </div>
               </div>
             );

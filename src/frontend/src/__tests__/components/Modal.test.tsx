@@ -53,4 +53,33 @@ describe('Modal', () => {
     await user.click(overlay);
     expect(screen.queryByText('modal content')).not.toBeInTheDocument();
   });
+
+  it('closeThen closes the modal then calls the callback', async () => {
+    const user = userEvent.setup();
+    const afterFn = vi.fn();
+
+    function ModalCloser() {
+      const { openModal, closeThen } = useModal();
+      return (
+        <button onClick={() => openModal(
+          <div>
+            <button onClick={closeThen(afterFn)}>Save and close</button>
+          </div>
+        )}>Open</button>
+      );
+    }
+
+    render(
+      <ModalProvider>
+        <ModalCloser />
+      </ModalProvider>
+    );
+
+    await user.click(screen.getByText('Open'));
+    expect(screen.getByText('Save and close')).toBeInTheDocument();
+
+    await user.click(screen.getByText('Save and close'));
+    expect(afterFn).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Save and close')).not.toBeInTheDocument();
+  });
 });
