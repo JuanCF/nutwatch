@@ -63,8 +63,6 @@ export default function UpsModal({ mode, ups, scanData, onSaved }: UpsModalProps
         body.name = trimmedName;
         await api(API.UPS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       }
-      closeModal();
-      onSaved();
       openModal(
         <RestartPromptModal
           title="UPS Saved"

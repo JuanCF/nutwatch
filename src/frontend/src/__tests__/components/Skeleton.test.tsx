@@ -61,4 +61,11 @@ describe('Skeleton', () => {
     expect(el.style.width).toBe('');
     expect(el.style.height).toBe('');
   });
+
+  it('preserves zero dimensions as px values', () => {
+    const { container } = render(<Skeleton width={0} height={0} />);
+    const el = container.firstElementChild as HTMLElement;
+    expect(el.style.width).toBe('0px');
+    expect(el.style.height).toBe('0px');
+  });
 });

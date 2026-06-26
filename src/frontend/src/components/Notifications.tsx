@@ -158,7 +158,6 @@ export default function Notifications() {
         timing,
       };
       await api(API.UPSMON_CONFIG, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      await alert('Notifications configuration saved.', 'Saved');
       openModal(
         <RestartPromptModal
           title="Notifications Saved"

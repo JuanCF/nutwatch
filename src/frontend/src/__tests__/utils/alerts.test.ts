@@ -33,14 +33,25 @@ describe('tryAlert', () => {
     expect(alert).toHaveBeenCalledWith('Failed to delete:\nsomething broke', 'Error');
   });
 
-  it('handles non-Error rejections', async () => {
+  it('handles string rejections', async () => {
     const alert = vi.fn().mockResolvedValue(undefined);
     const fn = vi.fn().mockRejectedValue('string error');
 
     await tryAlert(alert, fn, 'Done.', 'process');
 
     expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert).toHaveBeenCalledWith('Failed to process:\nstring error', 'Error');
+  });
+
+  it('handles object rejections', async () => {
+    const alert = vi.fn().mockResolvedValue(undefined);
+    const fn = vi.fn().mockRejectedValue({ detail: 'bad request' });
+
+    await tryAlert(alert, fn, 'Done.', 'process');
+
+    expect(alert).toHaveBeenCalledTimes(1);
     expect(alert.mock.calls[0][0]).toContain('Failed to process:');
+    expect(alert.mock.calls[0][0]).toContain('bad request');
     expect(alert.mock.calls[0][1]).toBe('Error');
   });
 
