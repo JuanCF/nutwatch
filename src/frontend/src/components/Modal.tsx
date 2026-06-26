@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 interface ModalContextValue {
   openModal: (jsx: ReactNode) => void;
   closeModal: () => void;
+  closeThen: (fn: () => void) => () => void;
   modalContent: ReactNode;
 }
 
@@ -23,6 +24,10 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     setContent(null);
   }, []);
 
+  const closeThen = useCallback((fn: () => void) => {
+    return () => { closeModal(); fn(); };
+  }, [closeModal]);
+
   useEffect(() => {
     if (content && modalRef.current) {
       modalRef.current.focus();
@@ -37,7 +42,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   }, [content]);
 
   return (
-    <ModalContext.Provider value={{ openModal, closeModal, modalContent: content }}>
+    <ModalContext.Provider value={{ openModal, closeModal, closeThen, modalContent: content }}>
       {children}
       <div
         className={`modal-overlay ${content ? 'open' : ''}`}

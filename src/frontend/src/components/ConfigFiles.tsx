@@ -2,12 +2,16 @@ import { useState } from 'react';
 import { api } from '../api';
 import { API, CONFIG_FILENAMES, READONLY_CONFIG } from '../constants';
 import { useConfirm } from './ConfirmDialog';
+import { useModal } from './Modal';
+import RestartPromptModal from './RestartPromptModal';
+import type { CommandResult } from '../types';
 
 export default function ConfigFiles() {
   const [filename, setFilename] = useState('');
   const [content, setContent] = useState('');
   const [readOnly, setReadOnly] = useState(false);
   const { alert } = useConfirm();
+  const { openModal, closeModal } = useModal();
 
   async function loadConfig(name: string) {
     setFilename(name);
@@ -25,7 +29,30 @@ export default function ConfigFiles() {
     if (filename === READONLY_CONFIG) { await alert(READONLY_CONFIG + ' is read-only', 'Error'); return; }
     try {
       await api(API.configFile(filename), { method: 'PUT', body: content });
-      await alert('Saved ' + filename, 'Config Saved');
+      const isMonitor = filename === 'upsmon.conf';
+      openModal(
+        <RestartPromptModal
+          title={`${filename} Saved`}
+          message={<p>Configuration saved for <strong>{filename}</strong>. Restart{isMonitor ? ' nut-monitor' : ' all services'} to apply changes now?</p>}
+          restartLabel={isMonitor ? 'Restart nut-monitor' : 'Restart All Services'}
+          onClose={closeModal}
+          onRestart={async () => {
+            try {
+              const r = await api<CommandResult>(
+                isMonitor ? API.SERVICE_RESTART_MONITOR : API.SERVICE_RESTART_ALL,
+                { method: 'POST' }
+              );
+              if (r.returncode !== 0) {
+                await alert('Restart warning:\n' + (r.stderr ?? r.stdout ?? ''), 'Restart Warning');
+              } else {
+                await alert(isMonitor ? 'nut-monitor restarted successfully.' : 'All NUT services restarted successfully.', 'Restarted');
+              }
+            } catch (e) {
+              await alert('Restart failed:\n' + (e as Error).message, 'Restart Error');
+            }
+          }}
+        />
+      );
     } catch (e) {
       await alert('Failed to save config:\n' + (e as Error).message, 'Error');
     }

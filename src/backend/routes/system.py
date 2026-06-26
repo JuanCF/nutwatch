@@ -5,7 +5,6 @@ from config import ALLOWED_CONFIGS, IDENTIFIER_REGEX
 from services.system import (
     restart_server,
     restart_monitor,
-    restart_driver,
     restart_all,
     service_status,
     detailed_service_status,
@@ -37,13 +36,6 @@ def put_config_handler(filename):
         return jsonify({"error": "upsd.users is read-only via this endpoint"}), 403
     if not put_config(filename, request.get_data(as_text=True)):
         return jsonify({"error": "failed"}), 500
-    if filename == "ups.conf":
-        restart_driver()
-        restart_server()
-    elif filename == "upsd.conf":
-        restart_server()
-    elif filename == "upsmon.conf":
-        restart_monitor()
     return jsonify({"ok": True})
 
 

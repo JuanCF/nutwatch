@@ -3,6 +3,7 @@ import { api } from '../api';
 import { API, NOTIFICATION_EVENTS } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
+import { tryAlert } from '../utils/alerts';
 import type { WolTargetsMap, WolTargetWithName, WolMapping, UpsDevice } from '../types';
 
 interface NetworkHost {
@@ -217,7 +218,7 @@ export default function WakeOnLan() {
   const [mappings, setMappings] = useState<WolMapping[]>([]);
   const [upsList, setUpsList] = useState<string[]>([]);
   const { confirm, dangerConfirm, alert } = useConfirm();
-  const { openModal, closeModal } = useModal();
+  const { openModal, closeThen } = useModal();
 
   const loadTargets = useCallback(async () => {
     try {
@@ -253,32 +254,27 @@ export default function WakeOnLan() {
   }, [loadTargets, loadMappings, loadUpsList]);
 
   function handleAddTarget() {
-    openModal(<TargetModal onSaved={() => { closeModal(); void loadTargets(); }} />);
+    openModal(<TargetModal onSaved={closeThen(loadTargets)} />);
   }
 
   function handleEditTarget(target: WolTargetWithName) {
-    openModal(<TargetModal target={target} onSaved={() => { closeModal(); void loadTargets(); }} />);
+    openModal(<TargetModal target={target} onSaved={closeThen(loadTargets)} />);
   }
 
   async function handleDeleteTarget(name: string) {
     const ok = await dangerConfirm('Delete WOL target "' + name + '"?');
     if (!ok) return;
-    try {
+    await tryAlert(alert, async () => {
       await api(API.wolTarget(name), { method: 'DELETE' });
       void loadTargets();
       void loadMappings();
-    } catch (e) {
-      await alert('Failed to delete target:\n' + (e as Error).message, 'Error');
-    }
+    }, 'Target deleted.', 'delete target');
   }
 
   async function handleWake(name: string) {
-    try {
+    await tryAlert(alert, async () => {
       await api(API.wolWake(name), { method: 'POST' });
-      await alert('Magic packet sent to ' + name, 'Wake on LAN');
-    } catch (e) {
-      await alert('Failed to wake ' + name + ':\n' + (e as Error).message, 'Error');
-    }
+    }, 'Magic packet sent to ' + name, 'wake ' + name);
   }
 
   async function handleWakeAll() {
@@ -295,18 +291,16 @@ export default function WakeOnLan() {
   }
 
   function handleAddMapping() {
-    openModal(<MappingModal upsList={upsList} targets={targets} onSaved={() => { closeModal(); void loadMappings(); }} />);
+    openModal(<MappingModal upsList={upsList} targets={targets} onSaved={closeThen(loadMappings)} />);
   }
 
   async function handleDeleteMapping(index: number) {
     const ok = await dangerConfirm('Delete this event mapping?');
     if (!ok) return;
-    try {
+    await tryAlert(alert, async () => {
       await api(API.wolMapping(index), { method: 'DELETE' });
       void loadMappings();
-    } catch (e) {
-      await alert('Failed to delete mapping:\n' + (e as Error).message, 'Error');
-    }
+    }, 'Mapping deleted.', 'delete mapping');
   }
 
   const targetNames = Object.keys(targets);

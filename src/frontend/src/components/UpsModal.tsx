@@ -4,6 +4,7 @@ import { API, DEFAULTS, POLL_INTERVAL_MIN } from '../constants';
 import { parseDirectives, formatDirectives } from '../utils/directives';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
+import RestartPromptModal from './RestartPromptModal';
 import type { UpsDevice, ScanDevice, CommandResult } from '../types';
 
 interface UpsModalProps {
@@ -30,10 +31,9 @@ export default function UpsModal({ mode, ups, scanData, onSaved }: UpsModalProps
     if (ups) return formatDirectives(Object.fromEntries(ups.directives ?? []));
     return 'pollinterval=' + DEFAULTS.POLL_INTERVAL;
   });
-  const [showRestart, setShowRestart] = useState(false);
   const savePending = useRef(false);
   const { confirm, alert } = useConfirm();
-  const { closeModal } = useModal();
+  const { closeModal, openModal } = useModal();
 
   const isEdit = mode === 'edit';
   const pollintervalMatch = directives.match(/^\s*pollinterval\s*=\s*(\d+)/m);
@@ -63,7 +63,15 @@ export default function UpsModal({ mode, ups, scanData, onSaved }: UpsModalProps
         body.name = trimmedName;
         await api(API.UPS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       }
-      setShowRestart(true);
+      openModal(
+        <RestartPromptModal
+          title="UPS Saved"
+          message={<p>Configuration saved for <strong>{trimmedName}</strong>. Restart services and driver to apply changes immediately?</p>}
+          restartLabel="Restart Driver"
+          onClose={onSaved}
+          onRestart={handleRestart}
+        />
+      );
     } catch (e) {
       await alert('Failed to save UPS:\n' + (e as Error).message, 'Error');
     } finally {
@@ -84,20 +92,6 @@ export default function UpsModal({ mode, ups, scanData, onSaved }: UpsModalProps
     } catch (e) { msg += 'Driver restart failed:\n' + (e as Error).message; }
     onSaved();
     await alert(msg, 'Restart Result');
-  }
-
-  if (showRestart) {
-    return (
-      <>
-        <h3>UPS Saved</h3>
-        <p>Configuration saved for <strong>{name}</strong>.</p>
-        <p>Restart services and driver to apply changes immediately?</p>
-        <div className="modal-actions">
-          <button className="secondary" onClick={onSaved}>Close</button>
-          <button className="primary" onClick={() => void handleRestart()}>Restart Driver</button>
-        </div>
-      </>
-    );
   }
 
   return (

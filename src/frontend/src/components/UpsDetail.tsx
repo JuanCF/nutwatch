@@ -6,6 +6,7 @@ import { formatRuntime } from '../utils/format';
 import { getBatteryChargeColor, getLoadColor } from '../utils/metrics';
 import Badge from './Badge';
 import Gauge from './Gauge';
+import Skeleton from './Skeleton';
 import HistoryChart from './HistoryChart';
 import type { UpsDevice, UpsDetailData } from '../types';
 
@@ -48,19 +49,19 @@ function SkeletonDetail() {
     <>
       <div className="detail-header">
         <div className="detail-title">
-          <div className="skeleton skeleton-title" style={{ width: '180px' }} />
-          <div className="skeleton skeleton-badge" />
+          <Skeleton className="skeleton-title" width="180px" />
+          <Skeleton className="skeleton-badge" />
         </div>
-        <div className="skeleton" style={{ width: '150px', height: '32px' }} />
+        <Skeleton width="150px" height="32px" />
       </div>
       <div className="detail-grid">
         {[1, 2, 3, 4].map(i => (
           <div key={i} className="detail-section">
-            <div className="skeleton skeleton-text" style={{ width: '80px', marginBottom: '0.85rem' }} />
-            <div className="skeleton skeleton-row" />
-            <div className="skeleton skeleton-row" />
-            <div className="skeleton skeleton-row" />
-            <div className="skeleton skeleton-row" style={{ borderBottom: 'none' }} />
+            <Skeleton className="skeleton-text" width="80px" style={{ marginBottom: '0.85rem' }} />
+            <Skeleton className="skeleton-row" />
+            <Skeleton className="skeleton-row" />
+            <Skeleton className="skeleton-row" />
+            <Skeleton className="skeleton-row" style={{ borderBottom: 'none' }} />
           </div>
         ))}
       </div>

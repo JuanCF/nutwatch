@@ -3,6 +3,7 @@ import { api } from '../api';
 import { API } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
+import { tryAlert } from '../utils/alerts';
 import type { NutUser } from '../types';
 
 interface UserModalProps {
@@ -36,19 +37,19 @@ export default function UserModal({ mode, user, onSaved }: UserModalProps) {
     }
     savePending.current = true;
     try {
-      const body: Record<string, string> = {};
-      if (password) body.password = password;
-      if (upsmon.trim()) body.upsmon = upsmon.trim();
-      if (actions.trim()) body.actions = actions.trim();
-      if (instcmds.trim()) body.instcmds = instcmds.trim();
-      if (isEdit) {
-        await api(API.user(trimmedName), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      } else {
-        await api(API.USERS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, name: trimmedName }) });
-      }
-      onSaved();
-    } catch (e) {
-      await alert('Failed to save user:\n' + (e as Error).message, 'Error');
+      await tryAlert(alert, async () => {
+        const body: Record<string, string> = {};
+        if (password) body.password = password;
+        if (upsmon.trim()) body.upsmon = upsmon.trim();
+        if (actions.trim()) body.actions = actions.trim();
+        if (instcmds.trim()) body.instcmds = instcmds.trim();
+        if (isEdit) {
+          await api(API.user(trimmedName), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        } else {
+          await api(API.USERS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, name: trimmedName }) });
+        }
+        onSaved();
+      }, 'User saved.', 'save user');
     } finally {
       savePending.current = false;
     }

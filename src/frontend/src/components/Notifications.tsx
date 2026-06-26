@@ -3,6 +3,7 @@ import { api } from '../api';
 import { API, NOTIFICATION_EVENTS, TIMING_KEYS, FLAGS, ROLES } from '../constants';
 import { useConfirm } from './ConfirmDialog';
 import { useModal } from './Modal';
+import RestartPromptModal from './RestartPromptModal';
 import type { UpsDevice, UpsmonConfig, MonitorRow, CommandResult } from '../types';
 
 interface NotifyForm {
@@ -157,29 +158,25 @@ export default function Notifications() {
         timing,
       };
       await api(API.UPSMON_CONFIG, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      await alert('Notifications configuration saved.', 'Saved');
       openModal(
-        <>
-          <h3>Notifications Saved</h3>
-          <p>Configuration saved successfully.</p>
-          <p>Restart nut-monitor to apply changes immediately?</p>
-          <div className="modal-actions">
-            <button className="secondary" onClick={closeModal}>Close</button>
-            <button className="primary" onClick={async () => {
-              closeModal();
-              try {
-                const r = await api<CommandResult>(API.SERVICE_RESTART_MONITOR, { method: 'POST' });
-                if (r.returncode !== 0) {
-                  await alert('Restart warning:\n' + (r.stderr ?? r.stdout ?? ''), 'Restart Warning');
-                } else {
-                  await alert('nut-monitor restarted successfully.', 'Restarted');
-                }
-              } catch (e) {
-                await alert('Restart failed:\n' + (e as Error).message, 'Restart Error');
+        <RestartPromptModal
+          title="Notifications Saved"
+          message={<p>Configuration saved successfully. Restart nut-monitor to apply changes immediately?</p>}
+          restartLabel="Restart nut-monitor"
+          onClose={closeModal}
+          onRestart={async () => {
+            try {
+              const r = await api<CommandResult>(API.SERVICE_RESTART_MONITOR, { method: 'POST' });
+              if (r.returncode !== 0) {
+                await alert('Restart warning:\n' + (r.stderr ?? r.stdout ?? ''), 'Restart Warning');
+              } else {
+                await alert('nut-monitor restarted successfully.', 'Restarted');
               }
-            }}>Restart nut-monitor</button>
-          </div>
-        </>
+            } catch (e) {
+              await alert('Restart failed:\n' + (e as Error).message, 'Restart Error');
+            }
+          }}
+        />
       );
     } catch (e) {
       await alert('Failed to save notifications:\n' + (e as Error).message, 'Error');
