@@ -14,7 +14,7 @@ This repository also includes `vm/nut-vm.sh`, a bash script to automatically cre
 
 ### Web Administration UI (NutWatch)
 
-- **Dashboard** — System overview with stat cards (UPS count, users, active services, system health) and quick-lists for all UPS devices and NUT services
+- **Dashboard** — System overview with stat cards (UPS count, users, active services, system health), CPU/memory/disk resource gauges, and quick-lists for all UPS devices and NUT services; one-click system actions (restart NutWatch, reboot, shutdown) with confirmation prompts
 - **UPS Devices** — CRUD management with card-grid view showing real-time telemetry (battery charge bar, load bar, runtime, voltage), per-card driver start/stop/restart, USB scan integration, and recommended config defaults
 - **UPS Detail Telemetry** — Deep-dive view grouped by subsystem (Battery, Input, Output, UPS, Device, Driver) with color-coded charge/load bars, unit-formatted values (V, Hz, W, VA, °C, A), runtime formatting, and raw variable dump; D3 gauge visualizations for battery charge and load
 - **Historical Data & Charts** — Per-UPS time-series data collected every 60 seconds into SQLite, displayed as D3 line charts with selectable ranges (1h, 24h, 7d, 30d) and per-variable filtering; configurable poll interval and 90-day retention
@@ -24,7 +24,7 @@ This repository also includes `vm/nut-vm.sh`, a bash script to automatically cre
 - **Live Log Streaming** — Real-time SSE log viewer tailing nut-server, nut-monitor, and nut-driver journals with pause/resume, auto-scroll, color-coded lines (error/warn/info), and configurable recent log loading
 - **Config Files** — Raw in-browser editor for ups.conf, upsd.conf, upsmon.conf, and upsd.users (read-only via this endpoint)
 - **Wake on LAN** — Manage WOL targets (MAC, broadcast, description), create event-to-target mappings for automatic wake on UPS events (ONLINE, ONBATT, etc.), manual "Wake Now" and "Wake All" buttons, and non-destructive auto-dispatch via notifycmd.sh; MAC address field shows a dropdown of hosts discovered from the ARP cache (with hostnames via reverse DNS) and auto-suggests the target name from the hostname
-- **Service Management** — One-click restart (nut-server, nut-monitor, or both) and per-UPS driver start/stop/restart with multi-fallback cleanup (upsdrvctl, systemctl, PID kill, pkill)
+- **Service Management** — One-click restart (nut-server, nut-monitor, or both) and per-UPS driver start/stop/restart with multi-fallback cleanup (upsdrvctl, systemctl, PID kill, pkill); system-level actions: restart NutWatch (with automatic page reload), reboot, and shutdown
 - **Bearer Token Auth** — API authentication via `NUTWATCH_API_KEY` env var; when unset, auth is disabled
 - **Atomic Config Writes** — All file writes use `tempfile` + `os.replace` to prevent corruption
 - **Input Validation** — Identifier regex, newline injection prevention, type checking on all inputs
@@ -264,6 +264,15 @@ src/frontend/src/
 | `POST` | `/api/driver/<name>/start` | Start UPS driver |
 | `POST` | `/api/driver/<name>/stop` | Stop UPS driver (multi-fallback cleanup) |
 | `POST` | `/api/driver/<name>/restart` | Restart UPS driver |
+
+### System
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/system/resources` | CPU%, memory usage/GB, and disk usage/GB |
+| `POST` | `/api/system/restart-nutwatch` | Restart the NutWatch web service (page reloads automatically) |
+| `POST` | `/api/system/reboot` | Reboot the entire system (requires `NUTWATCH_API_KEY`) |
+| `POST` | `/api/system/shutdown` | Shut down the system (requires `NUTWATCH_API_KEY`) |
 
 ### Config Files
 

@@ -414,6 +414,33 @@
 .health-failed { color: var(--red); }
 .health-unknown { color: var(--text-muted); }
 
+.stat-grid-resources {
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 75%;
+}
+
+.stat-card-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-gauge-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.4rem;
+}
+
+.gauge-na {
+  font-family: var(--mono);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
 /* ─── UPS Detail Page ─── */
 .detail-header {
   display: flex;
@@ -1325,6 +1352,11 @@ textarea#config-editor {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .stat-grid-resources {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+
   .dashboard-row {
     grid-template-columns: 1fr;
   }
@@ -1668,6 +1700,82 @@ textarea#config-editor {
   background: linear-gradient(90deg, var(--border-subtle) 25%, var(--surface-hover) 50%, var(--border-subtle) 75%);
   background-size: 200% 100%;
   animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.dashboard-row-actions {
+  margin-top: 1.5rem;
+}
+
+.system-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.system-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.system-action-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(129,140,248,0.15);
+}
+
+.system-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.system-action-btn svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.system-action-btn:hover:not(:disabled) svg {
+  opacity: 1;
+  stroke: var(--accent);
+}
+
+.system-action-danger {
+  border-color: rgba(248,113,113,0.25);
+}
+
+.system-action-danger:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+  box-shadow: 0 2px 8px rgba(248,113,113,0.15);
+}
+
+.system-action-danger:hover:not(:disabled) svg {
+  stroke: var(--red);
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes skeleton-pulse {

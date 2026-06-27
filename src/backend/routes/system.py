@@ -1,11 +1,15 @@
 from flask import Blueprint, request, jsonify
 
-from auth import require_admin
+from auth import require_admin, require_admin_strict
 from config import ALLOWED_CONFIGS, IDENTIFIER_REGEX
+from services.resources import get_system_resources
 from services.system import (
     restart_server,
     restart_monitor,
     restart_all,
+    reboot_system,
+    shutdown_system,
+    restart_nutwatch,
     service_status,
     detailed_service_status,
     driver_action,
@@ -69,4 +73,31 @@ def driver_action_handler(ups_name, action):
     if action not in ("start", "stop", "restart"):
         return jsonify({"error": "unknown action"}), 400
     rc, out, err = driver_action(ups_name, action)
+    return jsonify({"returncode": rc, "stdout": out, "stderr": err})
+
+
+@system_bp.route("/api/system/resources", methods=["GET"])
+@require_admin
+def system_resources_handler():
+    return jsonify(get_system_resources())
+
+
+@system_bp.route("/api/system/reboot", methods=["POST"])
+@require_admin_strict
+def system_reboot_handler():
+    rc, out, err = reboot_system()
+    return jsonify({"returncode": rc, "stdout": out, "stderr": err})
+
+
+@system_bp.route("/api/system/shutdown", methods=["POST"])
+@require_admin_strict
+def system_shutdown_handler():
+    rc, out, err = shutdown_system()
+    return jsonify({"returncode": rc, "stdout": out, "stderr": err})
+
+
+@system_bp.route("/api/system/restart-nutwatch", methods=["POST"])
+@require_admin_strict
+def system_restart_nutwatch_handler():
+    rc, out, err = restart_nutwatch()
     return jsonify({"returncode": rc, "stdout": out, "stderr": err})
