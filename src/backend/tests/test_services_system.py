@@ -162,25 +162,36 @@ def test_remove_stale_pid_files(tmp_path, monkeypatch):
 
 def test_reboot_system(monkeypatch):
     calls = []
-    monkeypatch.setattr("services.system.run_cmd", lambda cmd, **kw: (calls.append(cmd), _fake_rc(0))[1])
+    def fake_run(cmd, **kw):
+        calls.append((cmd, kw))
+        return _fake_rc(0)
+    monkeypatch.setattr("services.system.run_cmd", fake_run)
     from services.system import reboot_system
     rc, _, _ = reboot_system()
     assert rc == 0
-    assert any("reboot" in c for c in calls)
+    assert any("reboot" in c for c, kw in calls)
+    assert any(kw.get("timeout") == 10 for _, kw in calls)
 
 
 def test_shutdown_system(monkeypatch):
     calls = []
-    monkeypatch.setattr("services.system.run_cmd", lambda cmd, **kw: (calls.append(cmd), _fake_rc(0))[1])
+    def fake_run(cmd, **kw):
+        calls.append((cmd, kw))
+        return _fake_rc(0)
+    monkeypatch.setattr("services.system.run_cmd", fake_run)
     from services.system import shutdown_system
     rc, _, _ = shutdown_system()
     assert rc == 0
-    assert any("poweroff" in c for c in calls)
+    assert any("poweroff" in c for c, kw in calls)
+    assert any(kw.get("timeout") == 10 for _, kw in calls)
 
 
 def test_restart_nutwatch(monkeypatch):
     calls = []
-    monkeypatch.setattr("services.system.run_cmd", lambda cmd, **kw: (calls.append(cmd), _fake_rc(0))[1])
+    def fake_run(cmd, **kw):
+        calls.append((cmd, kw))
+        return _fake_rc(0)
+    monkeypatch.setattr("services.system.run_cmd", fake_run)
     monkeypatch.setattr("services.system.time.sleep", lambda s: None)
 
     class FakeThread:
@@ -195,4 +206,5 @@ def test_restart_nutwatch(monkeypatch):
     rc, out, _ = restart_nutwatch()
     assert rc == 0
     assert out == "restart scheduled"
-    assert any("nutwatch" in c for c in calls)
+    assert any("nutwatch" in c for c, kw in calls)
+    assert any(kw.get("timeout") == 10 for _, kw in calls)

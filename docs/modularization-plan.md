@@ -1,8 +1,10 @@
 # nutwatch Modularization Plan
 
+> **Note:** This is a historical design spec. The modularization has been completed and the codebase has evolved significantly since this document was written. See `AGENTS.md` and `README.md` for the current architecture.
+
 Extracted from the architecture session (`architecture.md`) — covers migrating from the monolithic `app.py` to a modular structure, including the proposed bundling and release pipeline.
 
-## Current State
+## Current State (historical)
 
 `app.py` (~685 lines) is a monolith containing:
 - Flask app setup and `require_admin` auth decorator

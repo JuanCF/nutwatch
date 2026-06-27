@@ -253,11 +253,19 @@ def test_system_shutdown_route_with_auth(monkeypatch):
         assert resp.status_code == 200
 
 
-def test_system_restart_nutwatch_route(monkeypatch):
-    monkeypatch.setattr("routes.system.restart_nutwatch", lambda: (0, "", ""))
+def test_system_restart_nutwatch_route_no_auth():
     app = _register_all(_make_app())
     with app.test_client() as c:
         resp = c.post("/api/system/restart-nutwatch")
+        assert resp.status_code == 403
+
+
+def test_system_restart_nutwatch_route_with_auth(monkeypatch):
+    monkeypatch.setattr("auth.NUTWATCH_API_KEY", "secret123")
+    monkeypatch.setattr("routes.system.restart_nutwatch", lambda: (0, "", ""))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/system/restart-nutwatch", headers={"Authorization": "Bearer secret123"})
         assert resp.status_code == 200
 
 
@@ -288,7 +296,7 @@ def test_list_ups_route(monkeypatch):
 
 def test_add_ups_route(monkeypatch):
     monkeypatch.setattr("routes.ups.add_ups", lambda d: ({"name": "newups"}, None))
-    monkeypatch.setattr("routes.ups.restart_driver", lambda: (0, "", ""))
+    monkeypatch.setattr("routes.ups.driver_action", lambda n, a: (0, "", ""))
     monkeypatch.setattr("routes.ups.restart_server", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
@@ -352,7 +360,7 @@ def test_get_ups_detail_route_fail(monkeypatch):
 
 def test_edit_ups_route(monkeypatch):
     monkeypatch.setattr("routes.ups.edit_ups", lambda n, d: {"name": "myups", "desc": "Updated"})
-    monkeypatch.setattr("routes.ups.restart_driver", lambda: (0, "", ""))
+    monkeypatch.setattr("routes.ups.driver_action", lambda n, a: (0, "", ""))
     monkeypatch.setattr("routes.ups.restart_server", lambda: (0, "", ""))
     app = _register_all(_make_app())
     with app.test_client() as c:
@@ -377,7 +385,6 @@ def test_edit_ups_route_invalid_directives():
 
 def test_delete_ups_route(monkeypatch):
     monkeypatch.setattr("routes.ups.delete_ups", lambda n: True)
-    monkeypatch.setattr("routes.ups.restart_driver", lambda: (0, "", ""))
     monkeypatch.setattr("routes.ups.restart_server", lambda: (0, "", ""))
     monkeypatch.setattr("routes.ups.restart_monitor", lambda: (0, "", ""))
     app = _register_all(_make_app())

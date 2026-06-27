@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [resources, setResources] = useState<SystemResources | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const { openModal, closeModal } = useModal();
 
   useEffect(() => {
@@ -95,14 +96,22 @@ export default function Dashboard() {
 
   const execAction = async (action: string, endpoint: string) => {
     setActionPending(action);
+    setActionError(null);
+    if (action === 'restart_nutwatch') {
+      try {
+        await api(endpoint, { method: 'POST' });
+        await waitForServerAndReload();
+        return;
+      } catch (e) {
+        setActionError((e as Error).message || 'Restart failed');
+        setActionPending(null);
+        return;
+      }
+    }
     try {
       await api(endpoint, { method: 'POST' });
     } catch {
-      // system may go down before response
-    }
-    if (action === 'restart_nutwatch') {
-      await waitForServerAndReload();
-      return;
+      // reboot / shutdown may take the server down before response
     }
     setActionPending(null);
   };
@@ -299,6 +308,11 @@ export default function Dashboard() {
       <div className="dashboard-row dashboard-row-actions">
         <div className="dashboard-card">
           <h3>System Actions</h3>
+          {actionError && (
+            <div className="action-error" style={{ color: 'var(--red)', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
+              {actionError}
+            </div>
+          )}
           <div className="system-actions">
             {actions.map(({ action, endpoint, label, icon }) => (
               <button

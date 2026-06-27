@@ -97,7 +97,7 @@ def system_shutdown_handler():
 
 
 @system_bp.route("/api/system/restart-nutwatch", methods=["POST"])
-@require_admin
+@require_admin_strict
 def system_restart_nutwatch_handler():
     rc, out, err = restart_nutwatch()
     return jsonify({"returncode": rc, "stdout": out, "stderr": err})

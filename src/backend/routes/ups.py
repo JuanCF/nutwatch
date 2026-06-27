@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 
 from auth import require_admin
 from config import IDENTIFIER_REGEX
-from services.system import restart_driver, restart_server, restart_monitor
+from services.system import restart_server, restart_monitor, driver_action
 from services.ups import list_ups, get_ups, add_ups, edit_ups, delete_ups, scan_ups, get_ups_detail
 
 ups_bp = Blueprint("ups", __name__)
@@ -30,7 +30,7 @@ def add_ups_handler():
     new_entry, err = add_ups(data)
     if err:
         return jsonify({"error": err}), 409
-    rc_driver, _, _ = restart_driver()
+    rc_driver, _, _ = driver_action(name, "start")
     rc_server, _, _ = restart_server()
     if rc_driver != 0 or rc_server != 0:
         return jsonify({"error": "Failed to restart NUT services"}), 500
@@ -71,7 +71,7 @@ def edit_ups_handler(name):
     e = edit_ups(name, data)
     if e is None:
         return jsonify({"error": "not found"}), 404
-    rc_driver, _, _ = restart_driver()
+    rc_driver, _, _ = driver_action(name, "restart")
     rc_server, _, _ = restart_server()
     if rc_driver != 0 or rc_server != 0:
         return jsonify({"error": "Failed to restart NUT services"}), 500
@@ -85,10 +85,9 @@ def delete_ups_handler(name):
         return jsonify({"error": "name contains invalid characters"}), 400
     if not delete_ups(name):
         return jsonify({"error": "not found"}), 404
-    rc_driver, _, _ = restart_driver()
     rc_server, _, _ = restart_server()
     rc_monitor, _, _ = restart_monitor()
-    if rc_driver != 0 or rc_server != 0 or rc_monitor != 0:
+    if rc_server != 0 or rc_monitor != 0:
         return jsonify({"error": "Failed to restart NUT services"}), 500
     return jsonify({"ok": True})
 

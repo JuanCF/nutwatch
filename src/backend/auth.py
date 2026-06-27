@@ -9,6 +9,10 @@ from config import NUTWATCH_API_KEY
 logger = logging.getLogger("nutwatch")
 
 
+def _sanitize_path(path: str) -> str:
+    return path.replace("\n", "").replace("\r", "")
+
+
 def require_admin(f):
     @functools.wraps(f)
     def decorated(*args, **kwargs):
@@ -19,7 +23,7 @@ def require_admin(f):
             token = auth_header[len("Bearer "):]
             if token == NUTWATCH_API_KEY:
                 return f(*args, **kwargs)
-        logger.warning("Auth failure from %s for %s", request.remote_addr, request.path)
+        logger.warning("Auth failure from %s for %s", request.remote_addr, _sanitize_path(request.path))
         return jsonify({"error": "unauthorized"}), 401
 
     return decorated
@@ -29,7 +33,7 @@ def require_admin_strict(f):
     @functools.wraps(f)
     def decorated(*args, **kwargs):
         if not NUTWATCH_API_KEY:
-            logger.warning("Strict-auth endpoint %s called without API key configured", request.path)
+            logger.warning("Strict-auth endpoint %s called without API key configured", _sanitize_path(request.path))
             return jsonify({"error": "this endpoint requires NUTWATCH_API_KEY to be set"}), 403
         return require_admin(f)(*args, **kwargs)
 

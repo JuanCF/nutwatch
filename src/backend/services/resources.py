@@ -23,7 +23,7 @@ def _cpu_sampler(interval: float = _SAMPLER_INTERVAL) -> None:
     if psutil is None:
         return
     try:
-        psutil.cpu_percent(interval=None)
+        _CPU_PERCENT = psutil.cpu_percent(interval=None)
     except Exception:
         pass
     while True:

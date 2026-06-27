@@ -52,7 +52,7 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 - Auth: Bearer token via `NUTWATCH_API_KEY` env var — if empty, auth is disabled. Destructive system endpoints (reboot, shutdown) use `require_admin_strict` which returns 403 when the API key is unset.
 - Config writes use atomic `tempfile` + `os.replace`; input validated with `IDENTIFIER_REGEX`.
 - `scripts/setup.sh --install-only` downloads a pre-built tarball from GitHub Releases (pinned by `NUTWATCH_REF` tag). To test a local build, run `make build-tarball`, serve the tarball, and set `NUTWATCH_URL_PREFIX`.
-- Tests live in `tests/` (10 files): parser roundtrips, service-layer CRUD, auth, routes, and utilities. Import from `parsers`, `utils`, `services`, `auth`, or `routes` (not from `app.py`) — tests run from `src/backend/`.
+- Tests live in `tests/` (11 files): parser roundtrips, service-layer CRUD, auth, routes, and utilities. Import from `parsers`, `utils`, `services`, `auth`, or `routes` (not from `app.py`) — tests run from `src/backend/`.
 
 ## Edge Cases
 
