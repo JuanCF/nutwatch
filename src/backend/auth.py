@@ -23,3 +23,14 @@ def require_admin(f):
         return jsonify({"error": "unauthorized"}), 401
 
     return decorated
+
+
+def require_admin_strict(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not NUTWATCH_API_KEY:
+            logger.warning("Strict-auth endpoint %s called without API key configured", request.path)
+            return jsonify({"error": "this endpoint requires NUTWATCH_API_KEY to be set"}), 403
+        return require_admin(f)(*args, **kwargs)
+
+    return decorated

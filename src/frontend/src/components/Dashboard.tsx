@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { api } from '../api';
 import { API } from '../constants';
 import { statusToBadgeClass } from '../utils/service';
-import { getBatteryChargeColor, getLoadColor } from '../utils/metrics';
+import { getBatteryChargeColor, getLoadColor, getResourceColor } from '../utils/metrics';
 import Badge from './Badge';
 import Gauge from './Gauge';
 import Skeleton from './Skeleton';
-import type { UpsDevice, UpsDetailData, ServicesMap } from '../types';
+import RestartPromptModal from './RestartPromptModal';
+import { useModal } from './Modal';
+import type { UpsDevice, UpsDetailData, ServicesMap, SystemResources } from '../types';
 
 type DetailMap = { [name: string]: UpsDetailData | undefined };
 
@@ -15,6 +17,13 @@ function SkeletonDashboard() {
     <>
       <div className="stat-grid">
         {[1, 2, 3, 4].map(i => (
+          <div key={i} className="stat-card">
+            <Skeleton className="skeleton-stat-card" />
+          </div>
+        ))}
+      </div>
+      <div className="stat-grid stat-grid-resources">
+        {[1, 2, 3].map(i => (
           <div key={i} className="stat-card">
             <Skeleton className="skeleton-stat-card" />
           </div>
@@ -43,7 +52,10 @@ export default function Dashboard() {
   const [details, setDetails] = useState<DetailMap>({});
   const [userCount, setUserCount] = useState<number | null>(null);
   const [services, setServices] = useState<ServicesMap | null>(null);
+  const [resources, setResources] = useState<SystemResources | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionPending, setActionPending] = useState<string | null>(null);
+  const { openModal, closeModal } = useModal();
 
   useEffect(() => {
     let cancelled = false;
@@ -51,11 +63,13 @@ export default function Dashboard() {
       api<UpsDevice[]>(API.UPS).catch(() => [] as UpsDevice[]),
       api<unknown[]>(API.USERS).catch(() => null),
       api<ServicesMap>(API.SERVICE_STATUS).catch(() => null),
-    ]).then(([ups, users, svcs]) => {
+      api<SystemResources>(API.SYSTEM_RESOURCES).catch(() => null),
+    ]).then(([ups, users, svcs, res]) => {
       if (cancelled) return;
       setUpsList(ups);
       setUserCount(Array.isArray(users) ? users.length : null);
       setServices(svcs);
+      setResources(res);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -78,6 +92,70 @@ export default function Dashboard() {
   }, [upsList]);
 
   if (loading) return <SkeletonDashboard />;
+
+  const execAction = async (action: string, endpoint: string) => {
+    setActionPending(action);
+    try {
+      await api(endpoint, { method: 'POST' });
+    } catch {
+      // system may go down before response
+    }
+    if (action === 'restart_nutwatch') {
+      await waitForServerAndReload();
+      return;
+    }
+    setActionPending(null);
+  };
+
+  const waitForServerAndReload = async () => {
+    await new Promise(r => setTimeout(r, 2000));
+    const maxAttempts = 60;
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const res = await fetch('/api' + API.SYSTEM_RESOURCES, { method: 'GET' });
+        if (res.ok) {
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // server still down
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    setActionPending(null);
+  };
+
+  const confirmAction = (action: string, endpoint: string, label: string) => {
+    const messages: Record<string, string> = {
+      reboot: 'This will reboot the entire system. The web UI will be unavailable until the system comes back online.',
+      shutdown: 'This will shut down the system. The web UI will become permanently unavailable until the system is manually powered on.',
+      restart_nutwatch: 'This will restart the NutWatch web UI. The page will reload automatically when the service is back up.',
+    };
+    openModal(
+      <RestartPromptModal
+        title={`${label}?`}
+        message={<p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{messages[action]}</p>}
+        restartLabel={label}
+        onClose={closeModal}
+        onRestart={async () => {
+          closeModal();
+          await execAction(action, endpoint);
+        }}
+      />
+    );
+  };
+
+  const actions = [
+    { action: 'restart_nutwatch', endpoint: API.SYSTEM_RESTART_NUTWATCH, label: 'Restart NutWatch', icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+    )},
+    { action: 'reboot', endpoint: API.SYSTEM_REBOOT, label: 'Reboot System', icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+    )},
+    { action: 'shutdown', endpoint: API.SYSTEM_SHUTDOWN, label: 'Shutdown System', icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+    )},
+  ];
 
   let health: string, healthClass: string;
   if (services) {
@@ -130,6 +208,45 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className="stat-grid stat-grid-resources">
+        <div className="stat-card stat-card-gauge">
+          <div className="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+          </div>
+          <div className="stat-gauge-row">
+            {resources?.cpu_percent != null
+              ? <Gauge value={resources.cpu_percent} size={80} color={getResourceColor(resources.cpu_percent)} label="CPU" />
+              : <div className="gauge-na">--</div>
+            }
+          </div>
+          <div className="stat-label">CPU Usage</div>
+        </div>
+        <div className="stat-card stat-card-gauge">
+          <div className="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 12h.01"/><path d="M17 12h.01"/><path d="M7 12h.01"/></svg>
+          </div>
+          <div className="stat-gauge-row">
+            {resources?.memory_percent != null
+              ? <Gauge value={resources.memory_percent} size={80} color={getResourceColor(resources.memory_percent)} label={`${resources.memory_used_gb ?? '?'}/${resources.memory_total_gb ?? '?'} GB`} />
+              : <div className="gauge-na">--</div>
+            }
+          </div>
+          <div className="stat-label">Memory</div>
+        </div>
+        <div className="stat-card stat-card-gauge">
+          <div className="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          </div>
+          <div className="stat-gauge-row">
+            {resources?.disk_percent != null
+              ? <Gauge value={resources.disk_percent} size={80} color={getResourceColor(resources.disk_percent)} label={`${resources.disk_free_gb ?? '?'} GB free`} />
+              : <div className="gauge-na">--</div>
+            }
+          </div>
+          <div className="stat-label">Disk Usage</div>
+        </div>
+      </div>
+
       <div className="dashboard-row">
         <div className="dashboard-card">
           <h3>UPS Overview</h3>
@@ -175,6 +292,29 @@ export default function Dashboard() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      </div>
+
+      <div className="dashboard-row dashboard-row-actions">
+        <div className="dashboard-card">
+          <h3>System Actions</h3>
+          <div className="system-actions">
+            {actions.map(({ action, endpoint, label, icon }) => (
+              <button
+                key={action}
+                className={`system-action-btn ${action === 'shutdown' ? 'system-action-danger' : ''}`}
+                disabled={actionPending !== null}
+                onClick={() => confirmAction(action, endpoint, label)}
+              >
+                {actionPending === action ? (
+                  <span className="spinner" />
+                ) : (
+                  icon
+                )}
+                <span>{label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>

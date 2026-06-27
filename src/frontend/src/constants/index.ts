@@ -30,6 +30,10 @@ export const API = {
   SERVICE_STATUS: '/service/status-detailed',
   SERVICE_RESTART_MONITOR: '/service/restart-monitor',
   SERVICE_RESTART_ALL: '/service/restart-all',
+  SYSTEM_RESOURCES: '/system/resources',
+  SYSTEM_REBOOT: '/system/reboot',
+  SYSTEM_SHUTDOWN: '/system/shutdown',
+  SYSTEM_RESTART_NUTWATCH: '/system/restart-nutwatch',
   LOGS_STREAM: '/api/logs/stream',
   LOGS_RECENT: '/logs/recent?lines=100',
   hooks: (upsname: string, event?: string) =>

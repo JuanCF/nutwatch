@@ -82,6 +82,16 @@ export interface UpsmonConfig {
   notify_flag?: Record<string, string[]>;
 }
 
+export interface SystemResources {
+  cpu_percent: number | null;
+  memory_percent: number | null;
+  memory_used_gb: number | null;
+  memory_total_gb: number | null;
+  disk_percent: number | null;
+  disk_free_gb: number | null;
+  disk_total_gb: number | null;
+}
+
 export interface CommandResult {
   returncode: number;
   stdout?: string;

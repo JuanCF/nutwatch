@@ -1,5 +1,7 @@
 import glob
 import os
+import threading
+import time
 
 from config import NUT_DIR, ALLOWED_CONFIGS, IDENTIFIER_REGEX
 from utils import run_cmd, read_file, write_file, stop_driver_and_cleanup
@@ -21,6 +23,22 @@ def restart_all():
     rc1, out1, err1 = run_cmd(["systemctl", "restart", "nut-server"])
     rc2, out2, err2 = run_cmd(["systemctl", "restart", "nut-monitor"])
     return rc1 or rc2, out1 + out2, err1 + err2
+
+
+def reboot_system():
+    return run_cmd(["systemctl", "reboot"], timeout=10)
+
+
+def shutdown_system():
+    return run_cmd(["systemctl", "poweroff"], timeout=10)
+
+
+def restart_nutwatch():
+    def _deferred():
+        time.sleep(1)
+        run_cmd(["systemctl", "restart", "nutwatch"], timeout=10)
+    threading.Thread(target=_deferred, daemon=True).start()
+    return 0, "restart scheduled", ""
 
 
 def service_status():

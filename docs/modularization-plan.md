@@ -79,7 +79,7 @@ Constants and configuration from environment variables:
 - `NUTWATCH_API_KEY`, `NUTWATCH_HOST`, `NUTWATCH_PORT`
 
 ### `auth.py`
-The `require_admin` decorator. Checks `NUTWATCH_API_KEY`; if empty, auth is disabled. Validates `Bearer` token from `Authorization` header.
+The `require_admin` and `require_admin_strict` decorators. `require_admin` checks `NUTWATCH_API_KEY`; if empty, auth is disabled. `require_admin_strict` returns 403 when the API key is unset — used for destructive endpoints (reboot, shutdown). Both validate `Bearer` token from `Authorization` header.
 
 ### `parsers/`
 Pure functions for parsing and serializing NUT configuration files. Each parser has zero side effects and is independently testable.

@@ -193,6 +193,74 @@ def test_driver_action_route(monkeypatch):
         assert resp.status_code == 200
 
 
+def test_system_resources_route(monkeypatch):
+    monkeypatch.setattr("routes.system.get_system_resources", lambda: {
+        "cpu_percent": 25.5,
+        "memory_percent": 60.2,
+        "memory_used_gb": 4.8,
+        "memory_total_gb": 8.0,
+        "disk_percent": 45.1,
+        "disk_free_gb": 110.5,
+        "disk_total_gb": 200.0,
+    })
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.get("/api/system/resources")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["cpu_percent"] == 25.5
+        assert data["memory_percent"] == 60.2
+        assert data["disk_percent"] == 45.1
+
+
+def test_system_reboot_route_no_auth():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/system/reboot")
+        assert resp.status_code == 403
+
+
+def test_system_reboot_route_with_auth(monkeypatch):
+    monkeypatch.setattr("auth.NUTWATCH_API_KEY", "secret123")
+    monkeypatch.setattr("routes.system.reboot_system", lambda: (0, "", ""))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/system/reboot", headers={"Authorization": "Bearer secret123"})
+        assert resp.status_code == 200
+
+
+def test_system_reboot_route_wrong_token(monkeypatch):
+    monkeypatch.setattr("auth.NUTWATCH_API_KEY", "secret123")
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/system/reboot", headers={"Authorization": "Bearer wrong"})
+        assert resp.status_code == 401
+
+
+def test_system_shutdown_route_no_auth():
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/system/shutdown")
+        assert resp.status_code == 403
+
+
+def test_system_shutdown_route_with_auth(monkeypatch):
+    monkeypatch.setattr("auth.NUTWATCH_API_KEY", "secret123")
+    monkeypatch.setattr("routes.system.shutdown_system", lambda: (0, "", ""))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/system/shutdown", headers={"Authorization": "Bearer secret123"})
+        assert resp.status_code == 200
+
+
+def test_system_restart_nutwatch_route(monkeypatch):
+    monkeypatch.setattr("routes.system.restart_nutwatch", lambda: (0, "", ""))
+    app = _register_all(_make_app())
+    with app.test_client() as c:
+        resp = c.post("/api/system/restart-nutwatch")
+        assert resp.status_code == 200
+
+
 def test_driver_action_invalid_name():
     app = _register_all(_make_app())
     with app.test_client() as c:

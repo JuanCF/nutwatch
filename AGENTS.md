@@ -47,9 +47,9 @@ CI runs `shellcheck` + `shfmt -d -i 2` on `vm/*.sh` and Python lint + tests (see
 
 - Modular Flask app: `app.py` (bootstrap), `auth.py` (Bearer auth), `config.py` (constants), `utils.py` (helpers), `parsers/` (config parsers), `services/` (business logic), `routes/` (API blueprints), `static/` (SPA frontend).
 - Web UI tabs: **UPS Devices** (with per-UPS hook editor), **Users**, **Notifications** (`upsmon.conf` editor), **Logs**, **Config Files**, **Wake on LAN**.
-- API endpoints: `/api/ups`, `/api/users`, `/api/upsmon/config`, `/api/hooks/<upsname>/<event>`, `/api/service/...`, `/api/logs/...`, `/api/wol/targets`, `/api/wol/mappings`.
+- API endpoints: `/api/ups`, `/api/users`, `/api/upsmon/config`, `/api/hooks/<upsname>/<event>`, `/api/service/...`, `/api/system/...`, `/api/logs/...`, `/api/wol/targets`, `/api/wol/mappings`.
 - Runs as `nutwatch.service` on port 8081 (configurable via `NUTWATCH_HOST`, `NUTWATCH_PORT` env vars).
-- Auth: Bearer token via `NUTWATCH_API_KEY` env var — if empty, auth is disabled.
+- Auth: Bearer token via `NUTWATCH_API_KEY` env var — if empty, auth is disabled. Destructive system endpoints (reboot, shutdown) use `require_admin_strict` which returns 403 when the API key is unset.
 - Config writes use atomic `tempfile` + `os.replace`; input validated with `IDENTIFIER_REGEX`.
 - `scripts/setup.sh --install-only` downloads a pre-built tarball from GitHub Releases (pinned by `NUTWATCH_REF` tag). To test a local build, run `make build-tarball`, serve the tarball, and set `NUTWATCH_URL_PREFIX`.
 - Tests live in `tests/` (10 files): parser roundtrips, service-layer CRUD, auth, routes, and utilities. Import from `parsers`, `utils`, `services`, `auth`, or `routes` (not from `app.py`) — tests run from `src/backend/`.

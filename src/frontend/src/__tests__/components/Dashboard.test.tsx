@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import Dashboard from '../../components/Dashboard';
+import { ModalProvider } from '../../components/Modal';
 import { API } from '../../constants';
 
 vi.mock('../../api', () => ({
@@ -23,6 +25,16 @@ const MOCK_SERVICES = {
   'nut-driver@ups1': { active: true, state: 'running' },
 };
 
+const MOCK_RESOURCES = {
+  cpu_percent: 25.5,
+  memory_percent: 60.2,
+  memory_used_gb: 4.8,
+  memory_total_gb: 8.0,
+  disk_percent: 45.1,
+  disk_free_gb: 110.5,
+  disk_total_gb: 200.0,
+};
+
 const MOCK_DETAILS: Record<string, unknown> = {
   ups1: { 'battery.charge': 85, 'ups.load': 32 },
   ups2: { 'battery.charge': 22, 'ups.load': 95 },
@@ -35,6 +47,7 @@ describe('Dashboard', () => {
       if (url === API.UPS) return Promise.resolve(MOCK_UPS_LIST);
       if (url === API.USERS) return Promise.resolve(MOCK_USERS);
       if (url === API.SERVICE_STATUS) return Promise.resolve(MOCK_SERVICES);
+      if (url === API.SYSTEM_RESOURCES) return Promise.resolve(MOCK_RESOURCES);
       const match = url.match(/\/ups\/([^/]+)\/detail/);
       if (match) return Promise.resolve(MOCK_DETAILS[match[1]] ?? null);
       return Promise.resolve(null);
@@ -42,7 +55,7 @@ describe('Dashboard', () => {
   });
 
   it('renders stat cards with counts', async () => {
-    render(<Dashboard />);
+    render(<ModalProvider><Dashboard /></ModalProvider>);
     await waitFor(() => {
       const twos = screen.getAllByText('2');
       expect(twos.length).toBeGreaterThanOrEqual(2);
@@ -53,7 +66,7 @@ describe('Dashboard', () => {
   });
 
   it('shows UPS table with gauge values', async () => {
-    render(<Dashboard />);
+    render(<ModalProvider><Dashboard /></ModalProvider>);
     await waitFor(() => expect(screen.getByText('ups1')).toBeInTheDocument());
     await waitFor(() => {
       expect(screen.getByText('85%')).toBeInTheDocument();
@@ -67,14 +80,14 @@ describe('Dashboard', () => {
       return Promise.resolve(null);
     });
 
-    render(<Dashboard />);
+    render(<ModalProvider><Dashboard /></ModalProvider>);
     await waitFor(() => {
       expect(screen.getByText('No UPS devices configured.')).toBeInTheDocument();
     });
   });
 
   it('shows services list', async () => {
-    render(<Dashboard />);
+    render(<ModalProvider><Dashboard /></ModalProvider>);
     await waitFor(() => {
       expect(screen.getByText('nut-server')).toBeInTheDocument();
       expect(screen.getByText('nut-monitor')).toBeInTheDocument();
@@ -82,7 +95,7 @@ describe('Dashboard', () => {
   });
 
   it('shows user count from users list', async () => {
-    render(<Dashboard />);
+    render(<ModalProvider><Dashboard /></ModalProvider>);
     await waitFor(() => {
       const twos = screen.getAllByText('2');
       expect(twos.length).toBeGreaterThanOrEqual(2);
@@ -102,7 +115,7 @@ describe('Dashboard', () => {
       return Promise.resolve(null);
     });
 
-    render(<Dashboard />);
+    render(<ModalProvider><Dashboard /></ModalProvider>);
     await waitFor(() => {
       expect(screen.getByText('Degraded')).toBeInTheDocument();
     });
@@ -121,9 +134,62 @@ describe('Dashboard', () => {
       return Promise.resolve(null);
     });
 
-    render(<Dashboard />);
+    render(<ModalProvider><Dashboard /></ModalProvider>);
     await waitFor(() => {
       expect(screen.getByText('Failed')).toBeInTheDocument();
     });
+  });
+
+  it('shows resource gauges when data is available', async () => {
+    render(<ModalProvider><Dashboard /></ModalProvider>);
+    await waitFor(() => {
+      expect(screen.getByText('CPU')).toBeInTheDocument();
+    });
+    expect(screen.getByText('CPU Usage')).toBeInTheDocument();
+    expect(screen.getByText('Memory')).toBeInTheDocument();
+    expect(screen.getByText('Disk Usage')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('26%')).toBeInTheDocument();
+      expect(screen.getByText('60%')).toBeInTheDocument();
+      expect(screen.getByText('45%')).toBeInTheDocument();
+    });
+  });
+
+  it('reloads page after restart_nutwatch', async () => {
+    const originalLocation = window.location;
+    const reloadMock = vi.fn();
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { reload: reloadMock },
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true } as Response) as unknown as typeof fetch;
+
+    mockApi.mockImplementation((url: string, opts?: RequestInit) => {
+      if (url === API.UPS) return Promise.resolve(MOCK_UPS_LIST);
+      if (url === API.USERS) return Promise.resolve(MOCK_USERS);
+      if (url === API.SERVICE_STATUS) return Promise.resolve(MOCK_SERVICES);
+      if (url === API.SYSTEM_RESOURCES) return Promise.resolve(MOCK_RESOURCES);
+      if (url === API.SYSTEM_RESTART_NUTWATCH && opts?.method === 'POST') return Promise.resolve({});
+      const match = url.match(/\/ups\/([^/]+)\/detail/);
+      if (match) return Promise.resolve(MOCK_DETAILS[match[1]] ?? null);
+      return Promise.resolve(null);
+    });
+
+    try {
+      const user = userEvent.setup();
+      render(<ModalProvider><Dashboard /></ModalProvider>);
+      await waitFor(() => expect(screen.getByText('UPS Devices')).toBeInTheDocument());
+
+      await user.click(screen.getByText('Restart NutWatch'));
+      const confirmButtons = screen.getAllByRole('button', { name: 'Restart NutWatch' });
+      await user.click(confirmButtons[confirmButtons.length - 1]);
+
+      await waitFor(() => expect(reloadMock).toHaveBeenCalled(), { timeout: 5000 });
+    } finally {
+      Object.defineProperty(window, 'location', { writable: true, value: originalLocation });
+      globalThis.fetch = originalFetch;
+    }
   });
 });
