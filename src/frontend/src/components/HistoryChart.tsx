@@ -125,14 +125,19 @@ function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[]
     content.appendChild(label);
   }
 
-  const xTicks = 5;
+  // Adapt the number of x-axis ticks to the available width and the rendered
+  // label width: longer formats (24h/7d/30d) get fewer ticks so they don't crowd.
+  const sampleLabel = formatTime(xMin + (xMax - xMin) / 2, range);
+  const approxLabelWidth = sampleLabel.length * 6.5 + 24;
+  const xTicks = Math.max(1, Math.min(8, Math.floor(innerW / approxLabelWidth)) - 1);
   for (let i = 0; i <= xTicks; i++) {
     const t = xMin + ((xMax - xMin) * i) / xTicks;
     const x = xScale(t);
     const label = document.createElementNS(ns, 'text');
     label.setAttribute('x', String(x));
     label.setAttribute('y', String(height - margin.bottom + 20));
-    label.setAttribute('text-anchor', 'middle');
+    // Anchor the first/last labels inward so they don't overflow the plot edges.
+    label.setAttribute('text-anchor', i === 0 ? 'start' : i === xTicks ? 'end' : 'middle');
     label.setAttribute('fill', 'var(--text-muted)');
     label.setAttribute('font-size', '11');
     label.textContent = formatTime(t, range);
