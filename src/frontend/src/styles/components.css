@@ -1691,15 +1691,36 @@ textarea#config-editor {
 }
 
 .chart-skeleton {
-  padding: 1rem;
+  width: 100%;
 }
 
-.skeleton-chart-area {
-  height: 160px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(90deg, var(--border-subtle) 25%, var(--surface-hover) 50%, var(--border-subtle) 75%);
-  background-size: 200% 100%;
-  animation: skeleton-pulse 1.5s ease-in-out infinite;
+.chart-skeleton-svg {
+  display: block;
+  width: 100%;
+  height: 400px;
+}
+
+.chart-skeleton-grid {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.chart-skeleton-tick {
+  fill: var(--border-subtle);
+  animation: skeleton-fade 1.5s ease-in-out infinite;
+}
+
+.chart-skeleton-line {
+  stroke: var(--text-muted);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: skeleton-fade 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-fade {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.8; }
 }
 
 .dashboard-row-actions {

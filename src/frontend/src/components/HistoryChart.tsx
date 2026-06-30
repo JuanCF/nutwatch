@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useId } from 'react';
+import { line as d3line, curveMonotoneX } from 'd3';
 import { api } from '../api';
 import { API } from '../constants';
-import Skeleton from './Skeleton';
 
 interface HistoryChartProps {
   upsName: string;
@@ -42,6 +42,27 @@ function formatTooltipTime(ts: number): string {
   return new Date(ts * 1000).toLocaleString();
 }
 
+// Reduce a dense series to ~maxPoints by averaging time and value within each
+// bucket. This softens high-frequency noise (24h/7d/30d collect thousands of
+// samples over a few hundred pixels) and keeps the path cheap to draw.
+function downsample(points: DataPoint[], maxPoints: number): DataPoint[] {
+  if (maxPoints < 1 || points.length <= maxPoints) return points;
+  const bucketSize = points.length / maxPoints;
+  const out: DataPoint[] = [];
+  for (let i = 0; i < maxPoints; i++) {
+    const start = Math.floor(i * bucketSize);
+    const end = Math.min(points.length, Math.floor((i + 1) * bucketSize));
+    let sumT = 0, sumV = 0, n = 0;
+    for (let j = start; j < end; j++) {
+      sumT += points[j][0];
+      sumV += points[j][1];
+      n++;
+    }
+    if (n > 0) out.push([sumT / n, sumV / n]);
+  }
+  return out;
+}
+
 function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[], range: string, clipId: string) {
   const svg = svgEl;
 
@@ -51,10 +72,14 @@ function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[]
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
 
+  // Cap drawn points to roughly one per few horizontal pixels; bucket-averaging
+  // smooths the dense 24h/7d/30d series (thousands of samples) without distorting
+  // the shape. Sparse ranges like 1h fall under the cap and pass through untouched.
+  const maxPoints = Math.max(2, Math.round(innerW / 4));
   const allPoints: { t: number; v: number }[] = [];
   const series = selectedVars
     .filter(v => data[v])
-    .map(v => ({ name: v, points: data[v] }));
+    .map(v => ({ name: v, points: downsample(data[v], maxPoints) }));
   for (const s of series) {
     for (const p of s.points) {
       allPoints.push({ t: p[0], v: p[1] });
@@ -129,15 +154,18 @@ function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[]
   // label width: longer formats (24h/7d/30d) get fewer ticks so they don't crowd.
   const sampleLabel = formatTime(xMin + (xMax - xMin) / 2, range);
   const approxLabelWidth = sampleLabel.length * 6.5 + 24;
-  const xTicks = Math.max(1, Math.min(8, Math.floor(innerW / approxLabelWidth)) - 1);
+  // Clamp the label count (not the interval count) so charts too narrow for two
+  // labels render a single centered one instead of two overlapping ones.
+  const labelCount = Math.max(1, Math.min(8, Math.floor(innerW / approxLabelWidth)));
+  const xTicks = labelCount - 1;
   for (let i = 0; i <= xTicks; i++) {
-    const t = xMin + ((xMax - xMin) * i) / xTicks;
+    const t = xTicks === 0 ? xMin + (xMax - xMin) / 2 : xMin + ((xMax - xMin) * i) / xTicks;
     const x = xScale(t);
     const label = document.createElementNS(ns, 'text');
     label.setAttribute('x', String(x));
     label.setAttribute('y', String(height - margin.bottom + 20));
     // Anchor the first/last labels inward so they don't overflow the plot edges.
-    label.setAttribute('text-anchor', i === 0 ? 'start' : i === xTicks ? 'end' : 'middle');
+    label.setAttribute('text-anchor', xTicks === 0 ? 'middle' : i === 0 ? 'start' : i === xTicks ? 'end' : 'middle');
     label.setAttribute('fill', 'var(--text-muted)');
     label.setAttribute('font-size', '11');
     label.textContent = formatTime(t, range);
@@ -146,6 +174,13 @@ function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[]
 
   const linesGroup = document.createElementNS(ns, 'g');
   chartArea.appendChild(linesGroup);
+
+  // Monotone cubic interpolation softens the line without overshooting past real
+  // values (e.g. it won't draw battery.charge above 100%).
+  const lineGen = d3line<DataPoint>()
+    .x(p => xScale(p[0]))
+    .y(p => yScale(p[1]))
+    .curve(curveMonotoneX);
 
   series.forEach((s, idx) => {
     const color = COLORS[idx % COLORS.length];
@@ -159,14 +194,8 @@ function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[]
       return;
     }
     if (s.points.length < 1) return;
-    let pathD = '';
-    for (let i = 0; i < s.points.length; i++) {
-      const x = xScale(s.points[i][0]);
-      const y = yScale(s.points[i][1]);
-      pathD += i === 0 ? `M${x},${y}` : `L${x},${y}`;
-    }
     const path = document.createElementNS(ns, 'path');
-    path.setAttribute('d', pathD);
+    path.setAttribute('d', lineGen(s.points) ?? '');
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', color);
     path.setAttribute('stroke-width', '2');
@@ -277,11 +306,32 @@ function drawChart(svgEl: SVGSVGElement, data: SeriesMap, selectedVars: string[]
   });
 }
 
+// Loading placeholder shaped like the real chart: y-axis ticks, gridlines, a
+// wavy data line and x-axis ticks, so the layout doesn't jump once data loads.
 function SkeletonChart() {
+  const rows = [0, 1, 2, 3, 4, 5];
+  const cols = [0, 1, 2, 3, 4, 5];
   return (
-    <div className="chart-skeleton">
-      <Skeleton className="skeleton-chart-area" />
-      <Skeleton className="skeleton-chart-area" width="60%" style={{ marginTop: '0.5rem' }} />
+    <div className="chart-skeleton" aria-hidden="true">
+      <svg className="chart-skeleton-svg" viewBox="0 0 800 400" preserveAspectRatio="none">
+        {rows.map(i => {
+          const y = 20 + i * 68;
+          return (
+            <g key={`r${i}`}>
+              <line className="chart-skeleton-grid" x1="60" y1={y} x2="780" y2={y} />
+              <rect className="chart-skeleton-tick" x="12" y={y - 5} width="36" height="10" rx="3" />
+            </g>
+          );
+        })}
+        <path
+          className="chart-skeleton-line"
+          fill="none"
+          d="M60,250 C140,190 200,310 280,255 S420,160 500,225 S640,305 720,215 L780,235"
+        />
+        {cols.map(i => (
+          <rect key={`c${i}`} className="chart-skeleton-tick" x={66 + i * 124} y="372" width="64" height="10" rx="3" />
+        ))}
+      </svg>
     </div>
   );
 }
