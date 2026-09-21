@@ -29,6 +29,8 @@
 #   NUT_MONITOR_PASS    — NUT monitor password
 #   NUT_LISTEN_ADDR     — NUT listen address (default: 0.0.0.0)
 #   NUT_LISTEN_PORT     — NUT listen port (default: 3493)
+#   FORCE_NUT_OVERWRITE — set to 1 to overwrite an existing NUT configuration
+#                         (a timestamped backup is kept in /var/backups/nut)
 
 set -euo pipefail
 
@@ -42,6 +44,7 @@ NUTWATCH_TARBALL_URL="${NUTWATCH_URL_PREFIX:-${NUTWATCH_RELEASES_URL}}/nutwatch.
 
 NUT_DEFAULT_PORT=3493
 NUT_DIR="/etc/nut"
+NUT_BACKUP_DIR="/var/backups/nut"
 NUTWATCH_DIR="/opt/nutwatch"
 
 declare -A UPS_VENDORS=(
@@ -209,6 +212,52 @@ detect_ups_usb() {
 #===============================================================================
 # NUT installation
 #===============================================================================
+
+# Returns 0 when this host already has a NUT configuration in use, i.e. any of
+# the files a fresh install would overwrite has a non-comment line.
+nut_config_exists() {
+  local f
+  for f in ups.conf upsd.conf upsmon.conf upsd.users; do
+    if [[ -f "$NUT_DIR/$f" ]] && grep -qEv '^[[:space:]]*(#|$)' "$NUT_DIR/$f"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+backup_nut_configs() {
+  local dest="$NUT_BACKUP_DIR/etc-nut-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$NUT_BACKUP_DIR"
+  cp -a "$NUT_DIR" "$dest"
+  chmod 700 "$dest"
+  ok "Existing NUT configuration backed up to $dest"
+}
+
+# A fresh install rewrites ups.conf, upsd.conf, upsmon.conf and upsd.users.
+# On a host that already monitors a UPS that silently replaces a working
+# configuration (driver, UPS name, users, and any clients that depend on it),
+# so ask first, never overwrite unattended, and always keep a backup.
+guard_existing_nut_config() {
+  nut_config_exists || return 0
+
+  warn "This host already has a NUT configuration in $NUT_DIR."
+  warn "A fresh install overwrites ups.conf, upsd.conf, upsmon.conf and upsd.users."
+  warn "To keep it and install only the web UI, run: sudo bash $0 --install-only"
+
+  if [[ "${FORCE_NUT_OVERWRITE:-}" != "1" ]]; then
+    if [[ "${AUTO:-}" == "1" ]]; then
+      err "Refusing to overwrite an existing NUT configuration in AUTO mode."
+      err "Use --install-only, or set FORCE_NUT_OVERWRITE=1 to overwrite it."
+      exit 1
+    fi
+    if ! prompt_yes_no "Overwrite the existing NUT configuration?" "n"; then
+      echo "Aborted. Nothing was changed."
+      exit 1
+    fi
+  fi
+
+  backup_nut_configs
+}
 
 install_nut() {
   info "Installing NUT packages..."
@@ -609,6 +658,7 @@ do_fresh_install() {
   check_root
   check_distro
   check_dependencies
+  guard_existing_nut_config
 
   if [[ -z "${NUT_UPS_NAME:-}" ]]; then
     prompt NUT_UPS_NAME "UPS name" "ups"
