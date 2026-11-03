@@ -242,6 +242,23 @@ backup_nut_configs() {
   ok "Existing NUT configuration backed up to $dest"
 }
 
+# Every NutWatch notifycmd.sh (setup.sh, the VM template, the release script)
+# dispatches hooks from /etc/nut/notify.d. A script without that path belongs to
+# the host's own NUT setup, so keep a copy before NutWatch's replaces it.
+backup_foreign_notifycmd() {
+  local f="$NUT_DIR/notifycmd.sh" dest
+  if [[ ! -f "$f" ]] || grep -qF '/etc/nut/notify.d' "$f"; then
+    return 0
+  fi
+  dest="$NUT_BACKUP_DIR/notifycmd.sh-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$NUT_BACKUP_DIR"
+  cp -aL "$f" "$dest"
+  chmod 700 "$dest"
+  warn "Replacing an existing $f that is not NutWatch's; saved it to $dest"
+  warn "NutWatch's notifycmd.sh runs per-UPS hooks from $NUT_DIR/notify.d/<UPS>_<EVENT>.sh;"
+  warn "move any custom notification logic there to keep it."
+}
+
 # A fresh install rewrites ups.conf, upsd.conf, upsmon.conf and upsd.users.
 # On a host that already monitors a UPS that silently replaces a working
 # configuration (driver, UPS name, users, and any clients that depend on it),
@@ -433,6 +450,7 @@ update_nutwatch() {
 
   # Deploy updated notifycmd.sh
   if [[ -f "$NUTWATCH_DIR/scripts/notifycmd.sh" ]]; then
+    backup_foreign_notifycmd
     cp "$NUTWATCH_DIR/scripts/notifycmd.sh" /etc/nut/notifycmd.sh
     chmod 750 /etc/nut/notifycmd.sh
     chown root:nut /etc/nut/notifycmd.sh
@@ -484,6 +502,7 @@ install_nutwatch() {
   info "Installing notifycmd script and creating log directories..."
   mkdir -p /etc/nut
   if [[ -f "$NUTWATCH_DIR/scripts/notifycmd.sh" ]]; then
+    backup_foreign_notifycmd
     cp "$NUTWATCH_DIR/scripts/notifycmd.sh" /etc/nut/notifycmd.sh
     chmod 750 /etc/nut/notifycmd.sh
     chown root:nut /etc/nut/notifycmd.sh
