@@ -613,6 +613,9 @@ UPSMON_EOF
     -e "s/__MONITOR_PASS__/$NUT_MONITOR_PASS/g" \
     "$tmp_dir/upsmon.conf"
 
+  # Keep in sync with default_notifycmd() in scripts/setup.sh. The VM never
+  # records this script's hash, so a change here must add its sha256 to
+  # NOTIFYCMD_KNOWN_SHA256 there, or `setup.sh --update` will treat it as foreign.
   cat >"$tmp_dir/notifycmd.sh" <<'NOTIFY_EOF'
 #!/bin/bash
 LOGFILE="/var/log/nut/notifycmd.log"
