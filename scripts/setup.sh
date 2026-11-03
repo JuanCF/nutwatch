@@ -251,10 +251,17 @@ nut_config_exists() {
 }
 
 # Copy $1 to $NUT_BACKUP_DIR/$2-<timestamp> (mode 700) and print the copy's path.
+# A backup made in the same second gets a .N suffix instead of overwriting (or,
+# for a directory, nesting inside) the earlier one.
 # Chained with && because set -e does not apply inside $(...).
 backup_to_nut_backups() {
-  local dest
-  dest="$NUT_BACKUP_DIR/$2-$(date +%Y%m%d-%H%M%S)"
+  local base dest n=0
+  base="$NUT_BACKUP_DIR/$2-$(date +%Y%m%d-%H%M%S)"
+  dest="$base"
+  while [[ -e "$dest" || -L "$dest" ]]; do
+    n=$((n + 1))
+    dest="$base.$n"
+  done
   mkdir -p "$NUT_BACKUP_DIR" && cp -aL "$1" "$dest" && chmod 700 "$dest" && echo "$dest"
 }
 
@@ -336,6 +343,19 @@ deploy_notifycmd() {
   fi
 }
 
+# Returns 0 if at least one event in upsmon.conf $1 ends up with EXEC. Like
+# upsmon, the last NOTIFYFLAG line for an event (matched case-insensitively)
+# replaces earlier ones, and IGNORE suppresses every action, EXEC included.
+notifyflag_has_exec() {
+  awk '$1 == "NOTIFYFLAG" && NF >= 3 {
+    f = $3; sub(/#.*/, "", f); gsub(/"/, "", f)
+    flags[toupper($2)] = "+" f "+"
+  } END {
+    for (e in flags) if (flags[e] ~ /[+]EXEC[+]/ && flags[e] !~ /[+]IGNORE[+]/) found = 1
+    exit !found
+  }' "$1"
+}
+
 # NutWatch's hooks only run if upsmon calls its notifycmd.sh with EXEC set.
 # --install-only and --update leave upsmon.conf alone, so say when it doesn't.
 warn_if_notifycmd_unused() {
@@ -348,7 +368,7 @@ warn_if_notifycmd_unused() {
   if [[ "$cmd" != "$target" ]]; then
     warn "$conf sets NOTIFYCMD to ${cmd:-nothing}, not $target, so NutWatch's"
     warn "hooks and Wake-on-LAN won't run. Set: NOTIFYCMD \"$target\""
-  elif ! grep -qE '^[[:space:]]*NOTIFYFLAG[[:space:]]+[A-Z]+[[:space:]]+[^#]*EXEC' "$conf"; then
+  elif ! notifyflag_has_exec "$conf"; then
     warn "No NOTIFYFLAG in $conf includes EXEC, so upsmon never runs $target."
     warn "Add EXEC to the events that need hooks, e.g.: NOTIFYFLAG ONBATT SYSLOG+WALL+EXEC"
   fi

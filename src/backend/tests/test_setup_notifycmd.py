@@ -137,6 +137,14 @@ def test_auto_keeps_symlink_even_to_identical_content(tmp_path, nut):
         ('NOTIFYCMD "/usr/local/bin/other.sh"\nNOTIFYFLAG ONBATT SYSLOG+WALL+EXEC\n', "sets NOTIFYCMD"),
         ("NOTIFYFLAG ONBATT SYSLOG+WALL+EXEC\n", "sets NOTIFYCMD to nothing"),
         ('NOTIFYCMD "{nut}/notifycmd.sh"\nNOTIFYFLAG ONBATT SYSLOG+WALL\n', "includes EXEC"),
+        # upsmon applies the last NOTIFYFLAG for an event (case-insensitive name).
+        (
+            'NOTIFYCMD "{nut}/notifycmd.sh"\nNOTIFYFLAG ONBATT SYSLOG+EXEC\nNOTIFYFLAG onbatt SYSLOG\n',
+            "includes EXEC",
+        ),
+        ('NOTIFYCMD "{nut}/notifycmd.sh"\nNOTIFYFLAG ONBATT SYSLOG\nNOTIFYFLAG ONBATT WALL+EXEC\n', None),
+        ('NOTIFYCMD "{nut}/notifycmd.sh"\nNOTIFYFLAG ONBATT EXEC+IGNORE\n', "includes EXEC"),
+        ('NOTIFYCMD "{nut}/notifycmd.sh"\nNOTIFYFLAG ONBATT SYSLOG # EXEC later\n', "includes EXEC"),
     ],
 )
 def test_warns_when_upsmon_wont_run_notifycmd(tmp_path, nut, upsmon, expected):
@@ -146,6 +154,24 @@ def test_warns_when_upsmon_wont_run_notifycmd(tmp_path, nut, upsmon, expected):
         assert "WARN" not in out
     else:
         assert expected in out
+
+
+def test_backups_in_the_same_second_do_not_overwrite_each_other(tmp_path, nut):
+    (nut / "a").write_text("first\n")
+    (nut / "b").write_text("second\n")
+    out = run_setup(
+        tmp_path,
+        'date() { echo 20260101-000000; }\n'
+        'backup_to_nut_backups "$NUT_DIR/a" notifycmd.sh\n'
+        'backup_to_nut_backups "$NUT_DIR/b" notifycmd.sh\n'
+        'backup_to_nut_backups "$NUT_DIR" etc-nut\n'
+        'backup_to_nut_backups "$NUT_DIR" etc-nut',
+    )
+    paths = out.split()
+    assert len(set(paths)) == 4
+    assert [Path(p).read_text() for p in paths[:2]] == ["first\n", "second\n"]
+    assert not (Path(paths[2]) / "nut").exists()  # second dir copy didn't nest
+    assert (Path(paths[3]) / "a").read_text() == "first\n"
 
 
 def test_vm_template_hash_is_known():
