@@ -237,7 +237,7 @@ backup_nut_configs() {
   local dest
   dest="$NUT_BACKUP_DIR/etc-nut-$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$NUT_BACKUP_DIR"
-  cp -a "$NUT_DIR" "$dest"
+  cp -aL "$NUT_DIR" "$dest"
   chmod 700 "$dest"
   ok "Existing NUT configuration backed up to $dest"
 }
