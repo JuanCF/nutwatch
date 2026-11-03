@@ -213,20 +213,29 @@ detect_ups_usb() {
 # NUT installation
 #===============================================================================
 
-# Returns 0 when this host already has a NUT configuration in use, i.e. any of
-# the files a fresh install would overwrite has a non-comment line.
+# Returns 0 when this host already has a NUT configuration in use. The packaged
+# ups.conf and upsmon.conf ship active defaults (maxretry, POLLFREQ, ...), so
+# "any non-comment line" is not enough: look for a UPS section, a user section,
+# a MONITOR line, or any active line in upsd.conf (packaged as comments only).
 nut_config_exists() {
-  local f
-  for f in ups.conf upsd.conf upsmon.conf upsd.users; do
-    if [[ -f "$NUT_DIR/$f" ]] && grep -qEv '^[[:space:]]*(#|$)' "$NUT_DIR/$f"; then
-      return 0
-    fi
-  done
+  if [[ -f "$NUT_DIR/ups.conf" ]] && grep -qE '^[[:space:]]*\[' "$NUT_DIR/ups.conf"; then
+    return 0
+  fi
+  if [[ -f "$NUT_DIR/upsd.users" ]] && grep -qE '^[[:space:]]*\[' "$NUT_DIR/upsd.users"; then
+    return 0
+  fi
+  if [[ -f "$NUT_DIR/upsmon.conf" ]] && grep -qE '^[[:space:]]*MONITOR[[:space:]]' "$NUT_DIR/upsmon.conf"; then
+    return 0
+  fi
+  if [[ -f "$NUT_DIR/upsd.conf" ]] && grep -qEv '^[[:space:]]*(#|$)' "$NUT_DIR/upsd.conf"; then
+    return 0
+  fi
   return 1
 }
 
 backup_nut_configs() {
-  local dest="$NUT_BACKUP_DIR/etc-nut-$(date +%Y%m%d-%H%M%S)"
+  local dest
+  dest="$NUT_BACKUP_DIR/etc-nut-$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$NUT_BACKUP_DIR"
   cp -a "$NUT_DIR" "$dest"
   chmod 700 "$dest"
@@ -242,7 +251,8 @@ guard_existing_nut_config() {
 
   warn "This host already has a NUT configuration in $NUT_DIR."
   warn "A fresh install overwrites ups.conf, upsd.conf, upsmon.conf and upsd.users."
-  warn "To keep it and install only the web UI, run: sudo bash $0 --install-only"
+  warn "To keep it and install only the web UI, run:"
+  warn "  curl -fsSL https://raw.githubusercontent.com/JuanCF/nutwatch/main/scripts/setup.sh | sudo bash -s -- --install-only"
 
   if [[ "${FORCE_NUT_OVERWRITE:-}" != "1" ]]; then
     if [[ "${AUTO:-}" == "1" ]]; then
@@ -753,6 +763,7 @@ main() {
     echo ""
     echo "Environment variables:"
     echo "  AUTO=1          — non-interactive mode (fresh install only)"
+    echo "  FORCE_NUT_OVERWRITE=1 — overwrite an existing NUT config (backed up first)"
     echo "  NUTWATCH_REF    — release tag (default: v1.3.0)"
     echo ""
     echo "NutWatch is open (no login) until an admin account is created via the"
