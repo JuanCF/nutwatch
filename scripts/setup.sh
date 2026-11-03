@@ -30,6 +30,7 @@
 #   NUT_LISTEN_ADDR     — NUT listen address (default: 0.0.0.0)
 #   NUT_LISTEN_PORT     — NUT listen port (default: 3493)
 #   FORCE_NUT_OVERWRITE — set to 1 to overwrite an existing NUT configuration
+#                         and a notifycmd.sh that NutWatch did not install
 #                         (a timestamped backup is kept in /var/backups/nut)
 
 set -euo pipefail
@@ -46,6 +47,22 @@ NUT_DEFAULT_PORT=3493
 NUT_DIR="/etc/nut"
 NUT_BACKUP_DIR="/var/backups/nut"
 NUTWATCH_DIR="/opt/nutwatch"
+NUTWATCH_STATE_DIR="/var/lib/nutwatch"
+
+# sha256 of the notifycmd.sh NutWatch last installed. A script that still
+# matches it has not been edited since, so it can be replaced without asking.
+NOTIFYCMD_HASH_FILE="$NUTWATCH_STATE_DIR/notifycmd.sha256"
+
+# Every notifycmd.sh NutWatch put in place without recording a hash: the release
+# script (pre-WOL and current) and the setup.sh / vm/nut-vm.sh template (v1.0.0
+# and current). vm/nut-vm.sh still never records one, so a change to its
+# template must add the new hash here (tests/test_setup_notifycmd.py checks).
+NOTIFYCMD_KNOWN_SHA256=(
+  3ae9ac5e2654302e938eeb6ba2e1282b051a01eb2140be59db178e531f5e3140
+  0c459a7cc5cc80ebb549b7819ec8d0ac81b5fcfbb3555901eabc3c91df612bd1
+  abbc19d42d444990581091c6fbbe7894b15fc327af559eb006a8683d21879eb2
+  a1dea83c04fd6f3c7b02e1464a92d8e7b2de957e278d8871752d9c961f64dbc1
+)
 
 declare -A UPS_VENDORS=(
   ["051d"]="APC"
@@ -233,30 +250,108 @@ nut_config_exists() {
   return 1
 }
 
+# Copy $1 to $NUT_BACKUP_DIR/$2-<timestamp> (mode 700) and print the copy's path.
+# Chained with && because set -e does not apply inside $(...).
+backup_to_nut_backups() {
+  local dest
+  dest="$NUT_BACKUP_DIR/$2-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$NUT_BACKUP_DIR" && cp -aL "$1" "$dest" && chmod 700 "$dest" && echo "$dest"
+}
+
 backup_nut_configs() {
   local dest
-  dest="$NUT_BACKUP_DIR/etc-nut-$(date +%Y%m%d-%H%M%S)"
-  mkdir -p "$NUT_BACKUP_DIR"
-  cp -aL "$NUT_DIR" "$dest"
-  chmod 700 "$dest"
+  dest=$(backup_to_nut_backups "$NUT_DIR" etc-nut)
   ok "Existing NUT configuration backed up to $dest"
 }
 
-# Every NutWatch notifycmd.sh (setup.sh, the VM template, the release script)
-# dispatches hooks from /etc/nut/notify.d. A script without that path belongs to
-# the host's own NUT setup, so keep a copy before NutWatch's replaces it.
-backup_foreign_notifycmd() {
-  local f="$NUT_DIR/notifycmd.sh" dest
-  if [[ ! -f "$f" ]] || grep -qF '/etc/nut/notify.d' "$f"; then
+# The notifycmd.sh a fresh install writes (same as vm/nut-vm.sh's template).
+default_notifycmd() {
+  cat <<'NOTIFY_EOF'
+#!/bin/bash
+LOGFILE="/var/log/nut/notifycmd.log"
+HOOKDIR="/etc/nut/notify.d"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+UPSNAME_BARE="${UPSNAME%%@*}"
+echo "[$TIMESTAMP] UPS=$UPSNAME EVENT=$NOTIFYTYPE" >>"$LOGFILE"
+[[ -x "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" ]] && "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" >>"$LOGFILE" 2>&1
+[[ -x "/usr/local/bin/nutwatch-wol-dispatch" ]] && "/usr/local/bin/nutwatch-wol-dispatch" "$UPSNAME_BARE" "$NOTIFYTYPE" >>"$LOGFILE" 2>&1
+NOTIFY_EOF
+}
+
+# Returns 0 when $2 (the installed notifycmd.sh) can be replaced by $1 without
+# asking: it is already identical, or it is a script NutWatch installed and
+# nobody has edited since. A symlink is always treated as the user's own.
+notifycmd_is_nutwatchs() {
+  local src="$1" target="$2" sum known
+  [[ -L "$target" || ! -f "$target" ]] && return 1
+  cmp -s "$src" "$target" && return 0
+  sum=$(sha256sum "$target")
+  sum="${sum%% *}"
+  if [[ -f "$NOTIFYCMD_HASH_FILE" && "$sum" == "$(<"$NOTIFYCMD_HASH_FILE")" ]]; then
     return 0
   fi
-  dest="$NUT_BACKUP_DIR/notifycmd.sh-$(date +%Y%m%d-%H%M%S)"
-  mkdir -p "$NUT_BACKUP_DIR"
-  cp -aL "$f" "$dest"
-  chmod 700 "$dest"
-  warn "Replacing an existing $f that is not NutWatch's; saved it to $dest"
-  warn "NutWatch's notifycmd.sh runs per-UPS hooks from $NUT_DIR/notify.d/<UPS>_<EVENT>.sh;"
-  warn "move any custom notification logic there to keep it."
+  for known in "${NOTIFYCMD_KNOWN_SHA256[@]}"; do
+    [[ "$sum" == "$known" ]] && return 0
+  done
+  return 1
+}
+
+# Install $1 as $NUT_DIR/notifycmd.sh (root:nut 750). Any other script there,
+# whether the host's own or NutWatch's with local edits, is kept unless the
+# user agrees to replace it (or FORCE_NUT_OVERWRITE=1; AUTO=1 alone keeps it),
+# and is backed up first. Never aborts the install: a kept script only warns.
+deploy_notifycmd() {
+  local src="$1" target="$NUT_DIR/notifycmd.sh" saved sum
+  if [[ -e "$target" || -L "$target" ]] && ! notifycmd_is_nutwatchs "$src" "$target"; then
+    warn "$target was not installed by NutWatch, or has local edits."
+    local replace=0
+    if [[ "${FORCE_NUT_OVERWRITE:-}" == "1" ]]; then
+      replace=1
+    elif [[ "${AUTO:-}" != "1" ]] && prompt_yes_no "Replace it with NutWatch's notifycmd.sh (a backup is kept)?" "n"; then
+      replace=1
+    fi
+    if [[ "$replace" == "1" ]] && ! saved=$(backup_to_nut_backups "$target" notifycmd.sh); then
+      warn "Could not back up $target."
+      replace=0
+    fi
+    if [[ "$replace" != "1" ]]; then
+      warn "Keeping it. NutWatch's per-UPS hooks ($NUT_DIR/notify.d) and Wake-on-LAN"
+      warn "dispatch only run from NutWatch's notifycmd.sh, which is at $src."
+      warn "Re-run with FORCE_NUT_OVERWRITE=1 to replace it (a backup is kept)."
+      return 0
+    fi
+    ok "Saved the existing $target to $saved"
+  fi
+
+  # Write a temp file and rename it over the target, so a symlink is replaced
+  # rather than written through to whatever it points at.
+  cp "$src" "$target.nutwatch-new"
+  chmod 750 "$target.nutwatch-new"
+  chown root:nut "$target.nutwatch-new"
+  mv -fT "$target.nutwatch-new" "$target"
+
+  sum=$(sha256sum "$target")
+  if ! { mkdir -p "$NUTWATCH_STATE_DIR" && echo "${sum%% *}" >"$NOTIFYCMD_HASH_FILE"; }; then
+    warn "Could not record $NOTIFYCMD_HASH_FILE; the next update will ask before replacing $target."
+  fi
+}
+
+# NutWatch's hooks only run if upsmon calls its notifycmd.sh with EXEC set.
+# --install-only and --update leave upsmon.conf alone, so say when it doesn't.
+warn_if_notifycmd_unused() {
+  local conf="$NUT_DIR/upsmon.conf" target="$NUT_DIR/notifycmd.sh" cmd
+  [[ -f "$conf" ]] || return 0
+  cmd=$(awk '$1 == "NOTIFYCMD" {
+    v = $0; sub(/^[[:space:]]*NOTIFYCMD[[:space:]]+/, "", v)
+    gsub(/"/, "", v); sub(/[[:space:]]+$/, "", v); last = v
+  } END { print last }' "$conf")
+  if [[ "$cmd" != "$target" ]]; then
+    warn "$conf sets NOTIFYCMD to ${cmd:-nothing}, not $target, so NutWatch's"
+    warn "hooks and Wake-on-LAN won't run. Set: NOTIFYCMD \"$target\""
+  elif ! grep -qE '^[[:space:]]*NOTIFYFLAG[[:space:]]+[A-Z]+[[:space:]]+[^#]*EXEC' "$conf"; then
+    warn "No NOTIFYFLAG in $conf includes EXEC, so upsmon never runs $target."
+    warn "Add EXEC to the events that need hooks, e.g.: NOTIFYFLAG ONBATT SYSLOG+WALL+EXEC"
+  fi
 }
 
 # A fresh install rewrites ups.conf, upsd.conf, upsmon.conf and upsd.users.
@@ -341,7 +436,7 @@ MONITOR ${ups_name}@localhost:${listen_port} 1 ${mon_user} ${mon_pass} master
 
 MINSUPPLIES 1
 SHUTDOWNCMD "/sbin/shutdown -h +0"
-NOTIFYCMD "/etc/nut/notifycmd.sh"
+NOTIFYCMD "$NUT_DIR/notifycmd.sh"
 POWERDOWNFLAG /etc/killpower
 
 POLLFREQ 5
@@ -371,24 +466,16 @@ NOTIFYFLAG NOPARENT SYSLOG+WALL+EXEC
 UPSMON_EOF
   ok "Wrote upsmon.conf"
 
-  cat >"$NUT_DIR/notifycmd.sh" <<'NOTIFY_EOF'
-#!/bin/bash
-LOGFILE="/var/log/nut/notifycmd.log"
-HOOKDIR="/etc/nut/notify.d"
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-UPSNAME_BARE="${UPSNAME%%@*}"
-echo "[$TIMESTAMP] UPS=$UPSNAME EVENT=$NOTIFYTYPE" >>"$LOGFILE"
-[[ -x "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" ]] && "$HOOKDIR/${UPSNAME_BARE}_${NOTIFYTYPE}.sh" >>"$LOGFILE" 2>&1
-[[ -x "/usr/local/bin/nutwatch-wol-dispatch" ]] && "/usr/local/bin/nutwatch-wol-dispatch" "$UPSNAME_BARE" "$NOTIFYTYPE" >>"$LOGFILE" 2>&1
-NOTIFY_EOF
-  chmod 750 "$NUT_DIR/notifycmd.sh"
-  ok "Wrote notifycmd.sh"
+  local notify_tmp
+  notify_tmp=$(mktemp)
+  default_notifycmd >"$notify_tmp"
+  deploy_notifycmd "$notify_tmp"
+  rm -f "$notify_tmp"
 
   mkdir -p "$NUT_DIR/notify.d" /var/log/nut
 
   chown root:nut "$NUT_DIR"/*.conf 2>/dev/null || true
   chmod 640 "$NUT_DIR"/*.conf
-  chown root:nut "$NUT_DIR/notifycmd.sh"
   chown root:nut "$NUT_DIR/notify.d"
   chmod 750 "$NUT_DIR/notify.d"
   chown nut:nut /var/log/nut
@@ -450,11 +537,9 @@ update_nutwatch() {
 
   # Deploy updated notifycmd.sh
   if [[ -f "$NUTWATCH_DIR/scripts/notifycmd.sh" ]]; then
-    backup_foreign_notifycmd
-    cp "$NUTWATCH_DIR/scripts/notifycmd.sh" /etc/nut/notifycmd.sh
-    chmod 750 /etc/nut/notifycmd.sh
-    chown root:nut /etc/nut/notifycmd.sh
+    deploy_notifycmd "$NUTWATCH_DIR/scripts/notifycmd.sh"
   fi
+  warn_if_notifycmd_unused
 
   systemctl daemon-reload
   systemctl enable nutwatch 2>/dev/null || true
@@ -500,15 +585,13 @@ install_nutwatch() {
   rm -f /tmp/nutwatch.tar.gz
 
   info "Installing notifycmd script and creating log directories..."
-  mkdir -p /etc/nut
+  mkdir -p "$NUT_DIR"
   if [[ -f "$NUTWATCH_DIR/scripts/notifycmd.sh" ]]; then
-    backup_foreign_notifycmd
-    cp "$NUTWATCH_DIR/scripts/notifycmd.sh" /etc/nut/notifycmd.sh
-    chmod 750 /etc/nut/notifycmd.sh
-    chown root:nut /etc/nut/notifycmd.sh
+    deploy_notifycmd "$NUTWATCH_DIR/scripts/notifycmd.sh"
   fi
-  mkdir -p /etc/nut/notify.d /var/log/nut
-  chown root:nut /etc/nut/notify.d && chmod 750 /etc/nut/notify.d
+  warn_if_notifycmd_unused
+  mkdir -p "$NUT_DIR/notify.d" /var/log/nut
+  chown root:nut "$NUT_DIR/notify.d" && chmod 750 "$NUT_DIR/notify.d"
   chown nut:nut /var/log/nut
 
   info "Setting up Python virtual environment..."
@@ -671,7 +754,7 @@ print_summary() {
     echo ""
   fi
 
-  echo "  Hook scripts go in: /etc/nut/notify.d/<UPSNAME>_<EVENT>.sh"
+  echo "  Hook scripts go in: $NUT_DIR/notify.d/<UPSNAME>_<EVENT>.sh"
   echo ""
 }
 
@@ -796,4 +879,5 @@ main() {
   esac
 }
 
-main "$@"
+# Tests source this file with NUTWATCH_SETUP_SOURCE_ONLY=1 to get the functions.
+[[ "${NUTWATCH_SETUP_SOURCE_ONLY:-}" == "1" ]] || main "$@"

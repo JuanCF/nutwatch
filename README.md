@@ -377,7 +377,7 @@ curl -fsSL https://raw.githubusercontent.com/JuanCF/nutwatch/main/scripts/setup.
 sudo bash scripts/setup.sh --install-only
 ```
 
-NUT config files are left untouched. NutWatch installs its own `/etc/nut/notifycmd.sh`; if a script that isn't NutWatch's already exists at that path, it is saved to `/var/backups/nut/notifycmd.sh-<timestamp>` first — move any custom logic into a per-UPS hook in `/etc/nut/notify.d/`.
+NUT config files are left untouched. NutWatch installs its own `/etc/nut/notifycmd.sh` (it runs the per-UPS hooks in `/etc/nut/notify.d/` and Wake-on-LAN). If a different script is already there (your own, or NutWatch's with local edits), the installer asks before replacing it and keeps it by default; with `AUTO=1` it is kept, and `FORCE_NUT_OVERWRITE=1` replaces it. A replaced script is saved to `/var/backups/nut/notifycmd.sh-<timestamp>` first. The installer also warns if `upsmon.conf` doesn't use NutWatch's script (`NOTIFYCMD`, and `EXEC` in `NOTIFYFLAG`).
 
 **Update mode** — Use `--update` to upgrade only the NutWatch application code in an existing installation (VM or standalone), preserving NUT configs, hooks, and the Python venv:
 
